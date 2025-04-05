@@ -74,6 +74,10 @@ printf(char *fmt, ...)
   va_start(ap, fmt);
   for(i = 0; (cx = fmt[i] & 0xff) != 0; i++){
     if(cx != '%'){
+      if (cx == '\n') {
+        consputc('\r');
+        consputc('\n');
+      }
       consputc(cx);
       continue;
     }

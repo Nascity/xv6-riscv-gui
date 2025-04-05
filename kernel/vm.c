@@ -54,6 +54,7 @@ void
 kvminit(void)
 {
   kernel_pagetable = kvmmake();
+
 }
 
 // Switch h/w page table register to the kernel's page table,

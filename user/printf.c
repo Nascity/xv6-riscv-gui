@@ -60,6 +60,9 @@ vprintf(int fd, const char *fmt, va_list ap)
     if(state == 0){
       if(c0 == '%'){
         state = '%';
+      } else if (c0 == '\n') {
+	putc(fd, '\r');
+	putc(fd, '\n');
       } else {
         putc(fd, c0);
       }
