@@ -29,7 +29,6 @@ OBJS = \
   $K/kernelvec.o \
   $K/plic.o \
   $K/virtio_disk.o \
-  $K/graphics.o \
   $K/virtio_gpu.o
 
 # riscv64-unknown-elf- or riscv64-linux-gnu-

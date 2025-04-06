@@ -6,8 +6,9 @@
 #ifndef __GRAPHICS_H__
 #define __GRAPHICS_H__
 
-#define WIDTH	200
-#define HEIGHT	200
+#define REQUIRED_PAGE_COUNT	1000
+
+#define RGB(r, g, b)	((r & 0xFF) << 16) + ((g & 0xFF) << 8) + (b & 0xFF)
 
 typedef uint16 le16;
 typedef uint32 le32;
@@ -59,8 +60,6 @@ struct virtio_gpu_ctrl_hdr
 	le32 padding; 
 };
 
-#define VIRTIO_GPU_MAX_SCANOUTS 16 
- 
 struct virtio_gpu_rect { 
         le32 x; 
         le32 y; 
@@ -68,6 +67,9 @@ struct virtio_gpu_rect {
         le32 height; 
 }; 
  
+#define VIRTIO_GPU_MAX_SCANOUTS 16 
+#define VIRTIO_GPU_RESP_OK_DISPLAY_INFO	0x1100
+
 struct virtio_gpu_resp_display_info { 
         struct virtio_gpu_ctrl_hdr hdr; 
         struct virtio_gpu_display_one { 
@@ -96,5 +98,39 @@ struct virtio_gpu_resource_create_2d {
         le32 format; 
         le32 width; 
         le32 height; 
+};
+
+struct virtio_gpu_resource_attach_backing { 
+        struct virtio_gpu_ctrl_hdr hdr; 
+        le32 resource_id; 
+        le32 nr_entries; 
+}; 
+ 
+struct virtio_gpu_mem_entry { 
+        le64 addr; 
+        le32 length; 
+        le32 padding; 
+};
+
+struct virtio_gpu_transfer_to_host_2d { 
+        struct virtio_gpu_ctrl_hdr hdr; 
+        struct virtio_gpu_rect r; 
+        le64 offset; 
+        le32 resource_id; 
+        le32 padding; 
+};
+
+struct virtio_gpu_resource_flush { 
+        struct virtio_gpu_ctrl_hdr hdr; 
+        struct virtio_gpu_rect r; 
+        le32 resource_id; 
+        le32 padding; 
+};
+
+struct virtio_gpu_set_scanout { 
+        struct virtio_gpu_ctrl_hdr hdr; 
+        struct virtio_gpu_rect r; 
+        le32 scanout_id; 
+        le32 resource_id; 
 };
 #endif
