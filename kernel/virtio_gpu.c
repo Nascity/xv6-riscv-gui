@@ -43,7 +43,7 @@ static struct gpu
 	uint32 height;
 
 	// the physical address of the frame buffer
-	uint64 fb_addr[REQUIRED_PAGE_COUNT];
+	volatile uint32* fb_addr[REQUIRED_PAGE_COUNT];
 } gpu;
 
 void
@@ -106,13 +106,13 @@ virtio_gpu_init(void)
 	virtio_gpu_fetch_display_info();
 	virtio_gpu_create_resource();
 	virtio_gpu_attach_memory();
+	printf("GPU initialized: %dx%d.\n", gpu.width, gpu.height);
 
 	write_ready_screen();
-	virtio_gpu_scanout();
-	virtio_gpu_transfer();
-	virtio_gpu_flush();
 
-	printf("GPU initialized: %dx%d.\n", gpu.width, gpu.height);
+	virtio_gpu_transfer();
+	virtio_gpu_scanout();
+	virtio_gpu_flush();
 }
 
 void virtio_gpu_fetch_display_info(void)
@@ -158,7 +158,7 @@ void virtio_gpu_attach_memory(void)
 	struct virtio_gpu_resource_attach_backing req = {
 		.hdr.type = VIRTIO_GPU_CMD_RESOURCE_ATTACH_BACKING,
 		.resource_id = 1,
-		.nr_entries = 1
+		.nr_entries = REQUIRED_PAGE_COUNT,
 	};
 	struct virtio_gpu_ctrl_hdr resp;
 
@@ -167,13 +167,12 @@ void virtio_gpu_attach_memory(void)
 		uint64 fb = (uint64)kalloc();
 
 		if (!fb)
-			panic("out of memory by gpu");
-
+			panic("not enough memory for GPU!");
 		entries[i].addr = fb;
 		entries[i].length = PGSIZE;
 		entries[i].padding = 0;
 
-		gpu.fb_addr[i] = fb;
+		gpu.fb_addr[i] = (volatile uint32*)fb;
 	}
 
 	virtio_gpu_send(&req, sizeof(req), entries, sizeof(entries), &resp, sizeof(resp));
@@ -286,15 +285,9 @@ void virtio_gpu_check_or_die(char *funcname, struct virtio_gpu_ctrl_hdr *resp, u
 void write_ready_screen(void)
 {
 	int x, y;
+	volatile uint32 **base = gpu.fb_addr;
 
-printf("in\n");
 	for (y = 0; y < gpu.height; y++)
 		for (x = 0; x < gpu.width; x++)
-		{
-			uint64 pix = (y * gpu.width + x);
-			uint32* pagebegin = (uint32*)(gpu.fb_addr[pix * 4 / PGSIZE]);
-
-			pagebegin[pix] = RGB(0, 255, 255);
-		}
-printf("out\n");
+			base[PAGE(x, y, gpu)][COORD(x, y, gpu)] = RGB(0, x % 256, y % 256);
 }

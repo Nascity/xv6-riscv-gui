@@ -8,7 +8,10 @@
 
 #define REQUIRED_PAGE_COUNT	1000
 
-#define RGB(r, g, b)	((r & 0xFF) << 16) + ((g & 0xFF) << 8) + (b & 0xFF)
+#define RGB(r, g, b)		((r & 0xFF) << 16) + ((g & 0xFF) << 8) + (b & 0xFF)
+#define PIX(x, y, gpu)		(x + y * gpu.width)
+#define PAGE(x, y, gpu)		(PIX(x, y, gpu) / (PGSIZE / 4))
+#define COORD(x, y, gpu)	(PIX(x, y, gpu) % (PGSIZE / 4))
 
 typedef uint16 le16;
 typedef uint32 le32;
