@@ -40,3 +40,5 @@ entry("uptime");
 # new syscalls
 entry("draw_fill");
 entry("draw_bits");
+entry("send_msg");
+entry("recv_msg");

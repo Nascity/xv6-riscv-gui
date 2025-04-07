@@ -38,9 +38,7 @@ static struct gpu
 	struct virtq_avail *avail;
 	struct virtq_used *used;
 
-	// array of checking whether a descriptor is free
-	char free[NUM];
-
+	// lock for gpu operations
 	struct spinlock gpu_lock;
 
 	// the dimension of the screen
@@ -49,6 +47,12 @@ static struct gpu
 
 	// the physical address of the frame buffer
 	volatile uint32* fb_addr[REQUIRED_PAGE_COUNT];
+
+	// req and resp that is needed for gpu opperations
+	uint64 alloced_base;
+	struct virtio_gpu_transfer_to_host_2d* transfer_buf;
+	struct virtio_gpu_resource_flush* flush_buf;
+	struct virtio_gpu_ctrl_hdr* resp_buf;
 } gpu;
 
 void
@@ -105,8 +109,10 @@ virtio_gpu_init(void)
 	// queue is ready
 	*R(VIRTIO_MMIO_QUEUE_READY) = 0x1;
 
-	for (int i = 0; i < NUM; i++)
-		gpu.free[i] = 1;
+	gpu.alloced_base = (uint64)kalloc();
+	gpu.transfer_buf = (struct virtio_gpu_transfer_to_host_2d*)gpu.alloced_base;
+	gpu.flush_buf = (struct virtio_gpu_resource_flush*)(gpu.alloced_base + 512);
+	gpu.resp_buf = (struct virtio_gpu_ctrl_hdr*)(gpu.alloced_base + 1024);
 
 	virtio_gpu_fetch_display_info();
 	virtio_gpu_create_resource();
@@ -195,10 +201,12 @@ void virtio_gpu_transfer(void)
 		},
 		.offset = 0
 	};
-	struct virtio_gpu_ctrl_hdr resp;
 
-	virtio_gpu_send(&req, sizeof(req), 0, 0, &resp, sizeof(resp));
-	virtio_gpu_check_or_die("transer", &resp, 0);
+	memset(gpu.flush_buf, 0, sizeof(req));
+	memmove(gpu.transfer_buf, &req, sizeof(req));
+	virtio_gpu_send(gpu.transfer_buf, sizeof(struct virtio_gpu_transfer_to_host_2d),
+			0, 0, gpu.resp_buf, sizeof(struct virtio_gpu_ctrl_hdr));
+	virtio_gpu_check_or_die("transer", gpu.resp_buf, 0);
 }
 
 void virtio_gpu_flush(void)
@@ -213,10 +221,12 @@ void virtio_gpu_flush(void)
 			.height = gpu.height
 		}
 	};
-	struct virtio_gpu_ctrl_hdr resp;
 
-	virtio_gpu_send(&req, sizeof(req), 0, 0, &resp, sizeof(resp));
-	virtio_gpu_check_or_die("flush", &resp, 0);
+	memset(gpu.flush_buf, 0, sizeof(req));
+	memmove(gpu.flush_buf, &req, sizeof(req));
+	virtio_gpu_send(gpu.flush_buf, sizeof (struct virtio_gpu_resource_flush),
+			0, 0, gpu.resp_buf, sizeof(struct virtio_gpu_ctrl_hdr));
+	virtio_gpu_check_or_die("flush", gpu.resp_buf, 0);
 }
 
 void virtio_gpu_scanout(void)
@@ -244,14 +254,10 @@ void virtio_gpu_send(void *cmd, int cmdlen, void *data, int datalen, void *resp,
 	int data_idx = 1;
 	int resp_idx = data ? 2 : 1;
 
-	void *phys_cmd, *phys_data, *phys_resp;
-
-	
-
 	acquire(&gpu.gpu_lock);
 
 	memset(&gpu.desc[cmd_idx], 0, sizeof(gpu.desc[0]));
-	gpu.desc[cmd_idx].addr = (uint64)phys_cmd;
+	gpu.desc[cmd_idx].addr = (uint64)cmd;
 	gpu.desc[cmd_idx].len = cmdlen;
 	gpu.desc[cmd_idx].flags = VRING_DESC_F_NEXT;
 	if (data) gpu.desc[cmd_idx].next = data_idx;
@@ -260,14 +266,14 @@ void virtio_gpu_send(void *cmd, int cmdlen, void *data, int datalen, void *resp,
 	if (data)
 	{
 		memset(&gpu.desc[data_idx], 0, sizeof(gpu.desc[0]));
-		gpu.desc[data_idx].addr = (uint64)phys_data;
+		gpu.desc[data_idx].addr = (uint64)data;
 		gpu.desc[data_idx].len = datalen;
 		gpu.desc[data_idx].flags = 0;
 		gpu.desc[data_idx].next = resp_idx;
 	}
 
 	memset(&gpu.desc[resp_idx], 0, sizeof(gpu.desc[0]));
-	gpu.desc[resp_idx].addr = (uint64)phys_resp;
+	gpu.desc[resp_idx].addr = (uint64)resp;
 	gpu.desc[resp_idx].len = resplen;
 	gpu.desc[resp_idx].flags = VRING_DESC_F_WRITE;
 
@@ -311,15 +317,13 @@ void write_ready_screen(void)
 
 void draw_fill(uint16 x, uint16 y, uint16 width, uint16 height, uint32 color)
 {
-	printf("[DEBUG] x: %d y: %d w: %d h: %d c: %x\n", x, y, width, height, color);
-
 	if (!gpu.fb_addr)
 		panic("fb is null!");
 	else if (gpu_panicked)
 		for (;;);
 
-	for (int i = 0; i < height; i++)
-		for (int j = 0; j < width; j++)
+	for (int i = 0; i < height && y + i < gpu.height; i++)
+		for (int j = 0; j < width && x + j < gpu.width; j++)
 			gpu.fb_addr[PAGE(x + j, y + i, gpu)][COORD(x + j, y + i, gpu)] = color;
 
 	virtio_gpu_apply();

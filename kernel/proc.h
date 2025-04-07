@@ -105,6 +105,6 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
 
-  // these are GUI extension of xv6
-  int graphical;
+  // message queue
+  uint64 msg_queue;
 };
