@@ -23,6 +23,9 @@ char* sbrk(int);
 int sleep(int);
 int uptime(void);
 
+void draw_fill(uint16, uint16, uint16, uint16, uint32);
+void draw_bits(uint16, uint16, uint16, uint16, uint32*);
+
 // ulib.c
 int stat(const char*, struct stat*);
 char* strcpy(char*, const char*);

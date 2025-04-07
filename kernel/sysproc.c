@@ -91,3 +91,37 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64
+sys_draw_fill(void)
+{
+	int x, y, w, h;
+	int color;
+
+	argint(0, &x);
+	argint(1, &y);
+	argint(2, &w);
+	argint(3, &h);
+	argint(4, &color);
+	
+	draw_fill(x, y, w, h, color);
+	
+	return 0;
+}
+
+uint64
+sys_draw_bits(void)
+{
+	int x, y, w, h;
+	uint64 bits;
+
+	argint(0, &x);
+	argint(1, &y);
+	argint(2, &w);
+	argint(3, &h);
+	argaddr(4, &bits);
+	
+	draw_bits(x, y, w, h, (uint32*)bits);
+	
+	return 0;
+}

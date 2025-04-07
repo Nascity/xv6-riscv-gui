@@ -36,3 +36,7 @@ entry("getpid");
 entry("sbrk");
 entry("sleep");
 entry("uptime");
+
+# new syscalls
+entry("draw_fill");
+entry("draw_bits");

@@ -13,7 +13,7 @@
 // the address of virtio mmio register r.
 #define R(r) ((volatile uint32 *)(VIRTIO1 + (r)))
 
-extern pagetable_t kernel_pagetable;
+volatile int gpu_panicked = 0;
 
 static void virtio_gpu_fetch_display_info(void);
 static void virtio_gpu_create_resource(void);
@@ -22,10 +22,15 @@ static void virtio_gpu_transfer(void);
 static void virtio_gpu_flush(void);
 static void virtio_gpu_scanout(void);
 
+static void virtio_gpu_apply(void);
 static void virtio_gpu_send(void*, int, void*, int, void*, int);
 static void virtio_gpu_check_or_die(char*, struct virtio_gpu_ctrl_hdr*, uint32);
 
 static void write_ready_screen(void);
+
+void draw_fill(uint16, uint16, uint16, uint16, uint32);
+void draw_bits(uint16, uint16, uint16, uint16, uint32*);
+void gpu_panic(char*);
 
 static struct gpu
 {
@@ -106,13 +111,11 @@ virtio_gpu_init(void)
 	virtio_gpu_fetch_display_info();
 	virtio_gpu_create_resource();
 	virtio_gpu_attach_memory();
+	virtio_gpu_scanout();
+
 	printf("GPU initialized: %dx%d.\n", gpu.width, gpu.height);
 
 	write_ready_screen();
-
-	virtio_gpu_transfer();
-	virtio_gpu_scanout();
-	virtio_gpu_flush();
 }
 
 void virtio_gpu_fetch_display_info(void)
@@ -241,8 +244,14 @@ void virtio_gpu_send(void *cmd, int cmdlen, void *data, int datalen, void *resp,
 	int data_idx = 1;
 	int resp_idx = data ? 2 : 1;
 
+	void *phys_cmd, *phys_data, *phys_resp;
+
+	
+
+	acquire(&gpu.gpu_lock);
+
 	memset(&gpu.desc[cmd_idx], 0, sizeof(gpu.desc[0]));
-	gpu.desc[cmd_idx].addr = (uint64)cmd;
+	gpu.desc[cmd_idx].addr = (uint64)phys_cmd;
 	gpu.desc[cmd_idx].len = cmdlen;
 	gpu.desc[cmd_idx].flags = VRING_DESC_F_NEXT;
 	if (data) gpu.desc[cmd_idx].next = data_idx;
@@ -251,14 +260,14 @@ void virtio_gpu_send(void *cmd, int cmdlen, void *data, int datalen, void *resp,
 	if (data)
 	{
 		memset(&gpu.desc[data_idx], 0, sizeof(gpu.desc[0]));
-		gpu.desc[data_idx].addr = (uint64)data;
+		gpu.desc[data_idx].addr = (uint64)phys_data;
 		gpu.desc[data_idx].len = datalen;
 		gpu.desc[data_idx].flags = 0;
 		gpu.desc[data_idx].next = resp_idx;
 	}
 
 	memset(&gpu.desc[resp_idx], 0, sizeof(gpu.desc[0]));
-	gpu.desc[resp_idx].addr = (uint64)resp;
+	gpu.desc[resp_idx].addr = (uint64)phys_resp;
 	gpu.desc[resp_idx].len = resplen;
 	gpu.desc[resp_idx].flags = VRING_DESC_F_WRITE;
 
@@ -266,9 +275,12 @@ void virtio_gpu_send(void *cmd, int cmdlen, void *data, int datalen, void *resp,
 	__sync_synchronize();
 	gpu.avail->idx++;
 
+
 	*R(VIRTIO_MMIO_QUEUE_NOTIFY) = 0;
 
 	while (gpu.used->idx != gpu.avail->idx) __sync_synchronize();
+
+	release(&gpu.gpu_lock);
 }
 
 void virtio_gpu_check_or_die(char *funcname, struct virtio_gpu_ctrl_hdr *resp, uint32 check)
@@ -282,12 +294,55 @@ void virtio_gpu_check_or_die(char *funcname, struct virtio_gpu_ctrl_hdr *resp, u
 	}
 }
 
+void virtio_gpu_apply(void)
+{
+	virtio_gpu_transfer();
+	virtio_gpu_flush();
+}
+
 void write_ready_screen(void)
 {
-	int x, y;
-	volatile uint32 **base = gpu.fb_addr;
+	for (int i = 0; i < gpu.height; i++)
+		for (int j = 0; j < gpu.width; j++)
+			gpu.fb_addr[PAGE(j, i, gpu)][COORD(j, i, gpu)] = RGB(0, j % 256, i % 256);
 
-	for (y = 0; y < gpu.height; y++)
-		for (x = 0; x < gpu.width; x++)
-			base[PAGE(x, y, gpu)][COORD(x, y, gpu)] = RGB(0, x % 256, y % 256);
+	virtio_gpu_apply();
+}
+
+void draw_fill(uint16 x, uint16 y, uint16 width, uint16 height, uint32 color)
+{
+	printf("[DEBUG] x: %d y: %d w: %d h: %d c: %x\n", x, y, width, height, color);
+
+	if (!gpu.fb_addr)
+		panic("fb is null!");
+	else if (gpu_panicked)
+		for (;;);
+
+	for (int i = 0; i < height; i++)
+		for (int j = 0; j < width; j++)
+			gpu.fb_addr[PAGE(x + j, y + i, gpu)][COORD(x + j, y + i, gpu)] = color;
+
+	virtio_gpu_apply();
+}
+
+void draw_bits(uint16 x, uint16 y, uint16 width, uint16 height, uint32 *bits)
+{
+	if (!gpu.fb_addr)
+		panic("fb is null!");
+	else if (gpu_panicked)
+		for (;;);
+
+
+	virtio_gpu_apply();
+}
+
+void gpu_panic(char *msg)
+{
+	if (!gpu.fb_addr)
+		panic(msg);
+	
+	draw_fill(0, 0, gpu.width, gpu.height, RGB(255, 0, 0));
+
+	gpu_panicked = 1;
+	for(;;);
 }

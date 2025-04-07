@@ -187,9 +187,9 @@ void            virtio_disk_intr(void);
 
 // virtio_gpu.c
 void		virtio_gpu_init(void);
-
-// graphics.c
-void		testfill(void);
+void 		draw_fill(uint16, uint16, uint16, uint16, uint32);
+void 		draw_bits(uint16, uint16, uint16, uint16, uint32*);
+void 		gpu_panic(char*);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

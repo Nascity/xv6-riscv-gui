@@ -20,3 +20,7 @@
 #define SYS_link   19
 #define SYS_mkdir  20
 #define SYS_close  21
+
+// new syscalls
+#define SYS_draw_fill	22
+#define SYS_draw_bits	23
