@@ -25,8 +25,8 @@ int uptime(void);
 
 int draw_fill(uint16, uint16, uint16, uint16, uint32);
 int draw_bits(uint16, uint16, uint16, uint16, uint32*);
-int send_msg(int, void*, uint64);
-int recv_msg(void*, uint64, int);
+int send_msg(int, void*, int);
+int recv_msg(void*, int, int);
 
 // ulib.c
 int stat(const char*, struct stat*);

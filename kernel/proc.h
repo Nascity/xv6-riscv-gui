@@ -107,4 +107,6 @@ struct proc {
 
   // message queue
   uint64 msg_queue;
+  int readptr;
+  int writeptr;
 };

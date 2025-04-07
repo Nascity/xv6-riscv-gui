@@ -106,6 +106,7 @@ void            yield(void);
 int             either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
 int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
+struct proc*	 findproc(int pid);
 
 // swtch.S
 void            swtch(struct context*, struct context*);
@@ -190,6 +191,10 @@ void		virtio_gpu_init(void);
 void 		draw_fill(uint16, uint16, uint16, uint16, uint32);
 void 		draw_bits(uint16, uint16, uint16, uint16, uint32*);
 void 		gpu_panic(char*);
+
+// msg.c
+int		send_msg(int, uint64, int);
+int		recv_msg(uint64, int, int);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

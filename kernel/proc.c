@@ -173,6 +173,8 @@ freeproc(struct proc *p)
   if (p->msg_queue)
 	  kfree((void*)p->msg_queue);
   p->msg_queue = 0;
+  p->readptr = 0;
+  p->writeptr = 0;
 }
 
 // Create a user page table for a given process, with no user memory,
@@ -254,6 +256,8 @@ userinit(void)
   p->cwd = namei("/");
 
   p->msg_queue = 0;
+  p->readptr = 0;
+  p->writeptr = 0;
 
   p->state = RUNNABLE;
 
@@ -698,4 +702,23 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+struct proc*
+findproc(int pid)
+{
+	struct proc *p;
+
+	for (p = proc; p < &proc[NPROC]; p++)
+	{
+		acquire(&p->lock);
+		if (p->pid == pid)
+		{
+			releae(&p->lock);
+			return p;
+		}
+		release(&p->lock);
+	}
+
+	return 0;
 }
