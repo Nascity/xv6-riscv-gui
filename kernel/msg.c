@@ -24,6 +24,7 @@
 
 // timeout
 #define TIMEOUT		-1
+#define INFINITE	-1
 
 struct msg
 {
@@ -33,14 +34,19 @@ struct msg
 
 struct spinlock ticks_lock;
 
-static int wait_timeout(struct proc, int, int (*)(struct proc*));
-static int buffer_has_space(struct proc*);
+static int wait_timeout(struct proc*, int, int (*)(struct proc*));
+static int read_wait(struct proc*, int);
+static void write_wait(struct proc*);
 
-extern uint64 ticks;
+extern uint ticks;
 
 int send_msg(int target_pid, uint64 user_buf, int size)
 {
 	struct proc *p;
+	char* kernel_buf;
+
+	// acquire write lock
+	acquire(&p->write_lock);
 
 	// find the struct proc* of the corresponding pid
 	p = findproc(target_pid);
@@ -53,18 +59,35 @@ int send_msg(int target_pid, uint64 user_buf, int size)
 	{
 		p->msg_queue = (uint64)kalloc();
 		if (!p->msg_queue)
-			panic("send_msg - not enough memory");
+			panic("send_msg - p->msg_queue alloc failed");
 	}
 	release(&p->lock);
 
-	// wait for buffer to be empty
-	if (!wait_timeout(p, INFINITE, buffer_can_be_written))
-		panic("send_msg - this shouldn't happen"); // if the infinite loop somehow breaks
+	write_wait(p);
 
 	printf("[DEBUG] sizeof(msg) = %ld\n", sizeof(struct msg));
-	printf("[DEBUG] wp = %d, rp = %d\n", p->writeptr, p->readptr);
+	printf("[DEBUG] bf wp = %d, rp = %d\n", p->writeptr, p->readptr);
+	
+	// move user mem to kernel memory
+	kernel_buf = (char*)kalloc();
+	if (!kernel_buf)
+		panic("send_msg - kernel_buf alloc failed");
+	if (copyin(p->pagetable, kernel_buf, user_buf, Q_SZ))
+		panic("send_msg - copyin failed");
+	
+	// move kernel memory to queue
+	struct msg *pm = &((struct msg*)p->msg_queue);
+	memmove(pm[p->writeptr]->msg, kernel_buf, Q_SZ);
+	pm[p->writeptr]->size = size;
 
+	// increment writeptr
+	p->writeptr = (p->writeptr + 1) % Q_SZ;
+
+	printf("[DEBUG] af wp = %d, rp = %d\n", p->writeptr, p->readptr);
+
+	kfree(kernel_buf);
 	release(&p->lock);
+	release(&p->write_lock);
 	return MSG_Q_OK;
 }
 
@@ -72,56 +95,61 @@ int send_msg(int target_pid, uint64 user_buf, int size)
 int recv_msg(uint64 user_buf, int size, int timeout)
 {
 	struct proc *p = myproc();
+	char *kernel_buf;
 
-	if (!wait_timeout(p, timeout, buffer_can_be_read))
+	acquire(&p->read_lock);
+	if (!read_wait(p, timeout))
 	{
-		release(p->lock);
+		release(&p->read_lock);
 		return MSG_Q_TIMEOUT;
 	}
 
-	printf("[DEBUG] wp = %d, rp = %d\n", p->writeptr, p->readptr);
+	printf("[DEBUG] bf wp = %d, rp = %d\n", p->writeptr, p->readptr);
 
+	// move kernel memory to user memory
+	struct msg *pm = &((struct msg*)p->msg_queue);
+	if (copyout(p->pagetable, user_buf, &pm[p->readptr]->msg, pm[p->readptr]->size))
+		panic("recv_msg - copyout failed");
+
+	// increment readptr
+	p->readptr = (p->readptr + 1) % Q_SZ;
+
+	printf("[DEBUG] af wp = %d, rp = %d\n", p->writeptr, p->readptr);
+
+	kfree(kernel_buf);
 	release(&p->lock);
+	release(&p->read_lock);
 	return MSG_Q_OK;
 }
 
-// return 0 when timout, 1 when the buffer is empty
-// p->lock has to be release later!!
-int wait_timeout(struct proc *p, int timeout, int (*cond)(struct proc*))
+int read_wait(struct proc *p, int timeout)
 {
-	uint64 start;
+	uint start;
 
+	// set 'start' atomically
 	acquire(&ticks_lock);
 	start = ticks;
 	release(&ticks_lock);
 
-	acquire(&p->lock);
-	while (!cond(p))
+	while (!p->msg_queue || p->readptr == p->writeptr)
 	{
-		if (timeout == INFINITE)
-			continue;
-
 		acquire(&ticks_lock);
 		if (ticks - start >= timeout * TPS)
 		{
 			release(&ticks_lock);
-			release(&p->lock);
 			return 0;
 		}
 		release(&ticks_lock);
 	}
+	__sync_synchronize();
+	acquire(&p->lock);
 
 	return 1;
 }
 
-// needs to be used with a lock
-int buffer_can_be_read(struct proc *p)
+void write_wait(struct proc *p)
 {
-	return p->msg_queue && readptr != writeptr;
-}
-
-// needs to be used with a lock
-int buffer_can_be_written(struct proc *p)
-{
-	return p->msg_queue && ((writeptr + 1) % Q_SZ != readptr);
+	while (p->readptr == p->writeptr);
+	__sync_synchronize();
+	acquire(&p->lock);
 }

@@ -53,6 +53,8 @@ procinit(void)
   initlock(&wait_lock, "wait_lock");
   for(p = proc; p < &proc[NPROC]; p++) {
       initlock(&p->lock, "proc");
+      initlock(&p->read_lock, "proc_r");
+      initlock(&p->write_lock, "proc_w");
       p->state = UNUSED;
       p->kstack = KSTACK((int) (p - proc));
   }
@@ -714,7 +716,7 @@ findproc(int pid)
 		acquire(&p->lock);
 		if (p->pid == pid)
 		{
-			releae(&p->lock);
+			release(&p->lock);
 			return p;
 		}
 		release(&p->lock);
