@@ -34,7 +34,6 @@ struct msg
 
 struct spinlock ticks_lock;
 
-static int wait_timeout(struct proc*, int, int (*)(struct proc*));
 static int read_wait(struct proc*, int);
 static void write_wait(struct proc*);
 
@@ -45,13 +44,13 @@ int send_msg(int target_pid, uint64 user_buf, int size)
 	struct proc *p;
 	char* kernel_buf;
 
-	// acquire write lock
-	acquire(&p->write_lock);
-
 	// find the struct proc* of the corresponding pid
 	p = findproc(target_pid);
 	if (!p)
 		return MSG_Q_PROC_NOT_FOUND;
+
+	// acquire write lock
+	acquire(&p->write_lock);
 	
 	// allocate new queue when empty
 	acquire(&p->lock);
@@ -62,12 +61,8 @@ int send_msg(int target_pid, uint64 user_buf, int size)
 			panic("send_msg - p->msg_queue alloc failed");
 	}
 	release(&p->lock);
-
 	write_wait(p);
 
-	printf("[DEBUG] sizeof(msg) = %ld\n", sizeof(struct msg));
-	printf("[DEBUG] bf wp = %d, rp = %d\n", p->writeptr, p->readptr);
-	
 	// move user mem to kernel memory
 	kernel_buf = (char*)kalloc();
 	if (!kernel_buf)
@@ -76,14 +71,12 @@ int send_msg(int target_pid, uint64 user_buf, int size)
 		panic("send_msg - copyin failed");
 	
 	// move kernel memory to queue
-	struct msg *pm = &((struct msg*)p->msg_queue);
-	memmove(pm[p->writeptr]->msg, kernel_buf, Q_SZ);
-	pm[p->writeptr]->size = size;
+	struct msg *pm = &((struct msg*)p->msg_queue)[p->writeptr];
+	memmove(pm->msg, kernel_buf, Q_SZ);
+	pm->size = size;
 
 	// increment writeptr
 	p->writeptr = (p->writeptr + 1) % Q_SZ;
-
-	printf("[DEBUG] af wp = %d, rp = %d\n", p->writeptr, p->readptr);
 
 	kfree(kernel_buf);
 	release(&p->lock);
@@ -95,7 +88,6 @@ int send_msg(int target_pid, uint64 user_buf, int size)
 int recv_msg(uint64 user_buf, int size, int timeout)
 {
 	struct proc *p = myproc();
-	char *kernel_buf;
 
 	acquire(&p->read_lock);
 	if (!read_wait(p, timeout))
@@ -104,19 +96,14 @@ int recv_msg(uint64 user_buf, int size, int timeout)
 		return MSG_Q_TIMEOUT;
 	}
 
-	printf("[DEBUG] bf wp = %d, rp = %d\n", p->writeptr, p->readptr);
-
 	// move kernel memory to user memory
-	struct msg *pm = &((struct msg*)p->msg_queue);
-	if (copyout(p->pagetable, user_buf, &pm[p->readptr]->msg, pm[p->readptr]->size))
+	struct msg *pm = &((struct msg*)p->msg_queue)[p->readptr];
+	if (copyout(p->pagetable, user_buf, (char*)pm->msg, pm->size))
 		panic("recv_msg - copyout failed");
 
 	// increment readptr
 	p->readptr = (p->readptr + 1) % Q_SZ;
 
-	printf("[DEBUG] af wp = %d, rp = %d\n", p->writeptr, p->readptr);
-
-	kfree(kernel_buf);
 	release(&p->lock);
 	release(&p->read_lock);
 	return MSG_Q_OK;
@@ -149,7 +136,7 @@ int read_wait(struct proc *p, int timeout)
 
 void write_wait(struct proc *p)
 {
-	while (p->readptr == p->writeptr);
+	while (p->readptr == (p->writeptr + 1 % Q_SZ));
 	__sync_synchronize();
 	acquire(&p->lock);
 }
