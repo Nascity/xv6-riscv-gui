@@ -119,3 +119,87 @@ I changed my machine to a Dell laptop, and the project suddenly halted.
 Seems that setting some control registers make the kernel halt.
 
 I think I should work on this error.
+
+# Fourth day of dev (Apr 9, approx. 2h wasted compiling packages)
+The error was caused by outdated version of `qemu-system-riscv64`.
+
+I had to download the source code and compile it on my machine.
+
+It was a hard task, since I had to install all the dependencies while typing `./configure`.
+
+Anyway, message passing works - refer to the picture below.
+
+![image](https://github.com/user-attachments/assets/cf2d7ad5-e796-42b9-b21f-2787d0737601)
+
+Here's the full code for `send_msg` and `recv_msg` syscalls:
+
+```c
+int send_msg(int target_pid, uint64 user_buf, int size)
+{
+	struct proc *p;
+	char* kernel_buf;
+
+	// find the struct proc* of the corresponding pid
+	p = findproc(target_pid);
+	if (!p)
+		return MSG_Q_PROC_NOT_FOUND;
+
+	// acquire write lock
+	acquire(&p->write_lock);
+	
+	// allocate new queue when empty
+	acquire(&p->lock);
+	if (!p->msg_queue)
+	{
+		p->msg_queue = (uint64)kalloc();
+		if (!p->msg_queue)
+			panic("send_msg - p->msg_queue alloc failed");
+	}
+	release(&p->lock);
+	write_wait(p);
+
+	// move user mem to kernel memory
+	kernel_buf = (char*)kalloc();
+	if (!kernel_buf)
+		panic("send_msg - kernel_buf alloc failed");
+	if (copyin(p->pagetable, kernel_buf, user_buf, Q_SZ))
+		panic("send_msg - copyin failed");
+	
+	// move kernel memory to queue
+	struct msg *pm = &((struct msg*)p->msg_queue)[p->writeptr];
+	memmove(pm->msg, kernel_buf, Q_SZ);
+	pm->size = size;
+
+	// increment writeptr
+	p->writeptr = (p->writeptr + 1) % Q_SZ;
+
+	kfree(kernel_buf);
+	release(&p->lock);
+	release(&p->write_lock);
+	return MSG_Q_OK;
+}
+
+int recv_msg(uint64 user_buf, int size, int timeout)
+{
+	struct proc *p = myproc();
+
+	acquire(&p->read_lock);
+	if (!read_wait(p, timeout))
+	{
+		release(&p->read_lock);
+		return MSG_Q_TIMEOUT;
+	}
+
+	// move kernel memory to user memory
+	struct msg *pm = &((struct msg*)p->msg_queue)[p->readptr];
+	if (copyout(p->pagetable, user_buf, (char*)pm->msg, pm->size))
+		panic("recv_msg - copyout failed");
+
+	// increment readptr
+	p->readptr = (p->readptr + 1) % Q_SZ;
+
+	release(&p->lock);
+	release(&p->read_lock);
+	return MSG_Q_OK;
+}
+```
