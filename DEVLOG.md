@@ -112,3 +112,10 @@ int recv_msg(uint64 user_buf, int size, int timeout)
 ```
 
 This is the prototype of `send_msg` and `recv_msg`. I'm scared of race conditions. It'll surely haunt me in my dreams.
+
+# Fourth day of dev (Apr 9, approx. 3h wasted debugging)
+I changed my machine to a Dell laptop, and the project suddenly halted.
+
+Seems that setting some control registers make the kernel halt.
+
+I think I should work on this error.
