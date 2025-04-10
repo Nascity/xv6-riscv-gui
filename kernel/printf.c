@@ -170,6 +170,7 @@ panic(char *s)
   printf("panic: ");
   printf("%s\n", s);
   panicked = 1; // freeze uart output from other CPUs
+  gpu_panic(s);
   for(;;)
     ;
 }

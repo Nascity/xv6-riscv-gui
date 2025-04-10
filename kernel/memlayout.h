@@ -27,6 +27,11 @@
 #define VIRTIO1 0x10008000
 #define VIRTIO1_IRQ 1
 
+// pcie mmio interface
+#define PCIE_BASE 0x30000000
+#define PCIE_SZ 0x10000000
+#define PCIE_IRQ 4
+
 // qemu puts platform-level interrupt controller (PLIC) here.
 #define PLIC 0x0c000000L
 #define PLIC_PRIORITY (PLIC + 0x0)

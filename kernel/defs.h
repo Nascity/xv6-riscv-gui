@@ -192,6 +192,9 @@ void 		draw_fill(uint16, uint16, uint16, uint16, uint32);
 void 		draw_bits(uint16, uint16, uint16, uint16, uint32*);
 void 		gpu_panic(char*);
 
+// virtio_mouse.c
+void		virtio_mouse_init(void);
+
 // msg.c
 int		send_msg(int, uint64, int);
 int		recv_msg(uint64, int, int);

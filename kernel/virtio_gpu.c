@@ -65,7 +65,10 @@ virtio_gpu_init(void)
 	initlock(&gpu.gpu_lock, "gpu");
 
 	if (magic != 0x74726976 || vendor != 0x554d4551 || device != 16)
+	{
+		printf("%x %x %x\n", magic, vendor, device);
 		panic("could not find virtio gpu");
+	}
 	
 	// reset the device
 	*R(VIRTIO_MMIO_STATUS) = 0;
@@ -343,9 +346,11 @@ void draw_bits(uint16 x, uint16 y, uint16 width, uint16 height, uint32 *bits)
 void gpu_panic(char *msg)
 {
 	if (!gpu.fb_addr)
-		panic(msg);
+		panic(0);
 	
-	draw_fill(0, 0, gpu.width, gpu.height, RGB(255, 0, 0));
+	draw_fill(0, 0, gpu.width, gpu.height / 3, RGB(75, 75, 75));
+	draw_fill(0, gpu.height / 3, gpu.width, 2 * gpu.height / 3, RGB(50, 50, 50));
+	draw_fill(0, 2 * gpu.height / 3, gpu.width, gpu.height, RGB(25, 25, 25));
 
 	gpu_panicked = 1;
 	for(;;);
