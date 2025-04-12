@@ -203,3 +203,16 @@ int recv_msg(uint64 user_buf, int size, int timeout)
 	return MSG_Q_OK;
 }
 ```
+
+# 5th day of dev (Apr 12, approx. 2h wasted on PCI)
+Using PCI device is a harsh job.
+
+While implementing GPU, I just had to consult `kernel/virtio_disk.c`, but `virtio-mouse-pci` is kinda different one.
+
+I had to implement some operations related to PCI and stuff.
+
+And ChatGPT never helped me in this topic, unlike when I was programming GPU.
+
+Am trying to fallback to using MMIO device like `virtio-mouse-device`.
+
+I hope it works flawlessly.
