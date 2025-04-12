@@ -75,6 +75,8 @@ virtio_gpu_init(void)
 
 	// set features
 	*R(VIRTIO_MMIO_STATUS) = VIRTIO_CONFIG_S_ACKNOWLEDGE | VIRTIO_CONFIG_S_DRIVER | VIRTIO_CONFIG_S_DRIVER_OK;
+	if (!(*R(VIRTIO_MMIO_STATUS) & VIRTIO_CONFIG_S_FEATURES_OK))
+		panic("gpu didn't except the features");
 
 	// initialize queue 0
 	*R(VIRTIO_MMIO_QUEUE_SEL) = 0;
