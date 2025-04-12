@@ -194,6 +194,7 @@ void 		gpu_panic(char*);
 
 // virtio_mouse.c
 void		virtio_mouse_init(void);
+void		virtio_mouse_intr(void);
 
 // msg.c
 int		send_msg(int, uint64, int);
