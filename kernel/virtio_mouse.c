@@ -121,11 +121,10 @@ virtio_mouse_intr(void)
 	*R(VIRTIO_MMIO_INTERRUPT_ACK) = *R(VIRTIO_MMIO_INTERRUPT_STATUS) & 0x3;
 	__sync_synchronize();
 
-	printf("used->idx = %d\n", mouse.avail->idx);
-	while (mouse.used_idx != mouse.avail->idx)
+	while (mouse.used->idx != mouse.used_idx)
 	{
-		__sync_synchronize();
-		int id = mouse.used->ring[mouse.used_idx].id;
+		printf("%d / %d\n", mouse.used->idx, mouse.used_idx);
+		int id = mouse.used->ring[mouse.used->idx].id;
 
 		struct virtio_input_event *event =
 			(struct virtio_input_event*)&mouse.desc[id];
