@@ -87,26 +87,21 @@ virtio_mouse_init(void)
 	*R(VIRTIO_MMIO_DEVICE_DESC_LOW) = (uint64)mouse.used;
 	*R(VIRTIO_MMIO_DEVICE_DESC_HIGH) = (uint64)mouse.used >> 32;
 
-	//// MAYBE DELETE?
 	for (int i = 0; i < NUM; i++)
 	{
 		mouse.desc[i].addr = (uint64)&mouse.evbuf[i];
 		mouse.desc[i].len = sizeof(struct virtio_input_event);
 		mouse.desc[i].flags = VRING_DESC_F_WRITE;
 		mouse.desc[i].next = 0;
-	}
-
-	for (int i = 0; i < NUM; i++)
-	{
 		mouse.avail->ring[i] = i;
 		__sync_synchronize();
 		mouse.avail->idx++;
 		__sync_synchronize();
 	}
-	// queue is ready
-	*R(VIRTIO_MMIO_QUEUE_READY) = 0x1;
 
+	// queue is ready
 	*R(VIRTIO_MMIO_QUEUE_NOTIFY) = 0;
+	*R(VIRTIO_MMIO_QUEUE_READY) = 0x1;
 
 	mouse.used_idx = 0;
 
@@ -123,16 +118,19 @@ virtio_mouse_intr(void)
 
 	while (mouse.used->idx != mouse.used_idx)
 	{
-		printf("%d / %d\n", mouse.used->idx, mouse.used_idx);
-		int id = mouse.used->ring[mouse.used->idx].id;
-
+		int id = mouse.used->ring[mouse.used_idx % NUM].id;
 		struct virtio_input_event *event =
-			(struct virtio_input_event*)&mouse.desc[id];
+			(struct virtio_input_event*)mouse.desc[id].addr;
 
-		printf("type; %d code: %d value: %d\n", event->type, event->code, event->value);
+		printf("type: %d code: %d value: %d\n", event->type, event->code, event->value);
 
+		mouse.avail->ring[mouse.avail->idx % NUM] = id;
+		__sync_synchronize();
+		mouse.avail->idx++;
 		mouse.used_idx++;
+
 	}
+	*R(VIRTIO_MMIO_QUEUE_NOTIFY) = 0;
 
 	release(&mouse.mouse_lock);
 }

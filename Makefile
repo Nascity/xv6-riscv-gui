@@ -173,7 +173,8 @@ QEMUOPTS += -global virtio-mmio.force-legacy=false
 QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0
 QEMUOPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 QEMUOPTS += -display gtk  -vga none -serial stdio
-QEMUOPTS += -device virtio-gpu-device,bus=virtio-mmio-bus.1 -device virtio-mouse-device,bus=virtio-mmio-bus.2
+QEMUOPTS += -device virtio-gpu-device,bus=virtio-mmio-bus.1
+QEMUOPTS += -device virtio-mouse-device,bus=virtio-mmio-bus.2
 
 qemu: $K/kernel fs.img
 	$(QEMU) $(QEMUOPTS)
