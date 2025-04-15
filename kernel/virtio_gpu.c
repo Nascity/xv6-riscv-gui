@@ -29,7 +29,7 @@ static void virtio_gpu_check_or_die(char*, struct virtio_gpu_ctrl_hdr*, uint32);
 static void write_ready_screen(void);
 
 void draw_fill(uint16, uint16, uint16, uint16, uint32);
-void draw_bits(uint16, uint16, uint16, uint16, uint32*);
+void draw_bits(uint16, uint16, uint16, uint16, uint32*, int);
 void gpu_panic(char*);
 
 static struct gpu
@@ -318,6 +318,11 @@ void write_ready_screen(void)
 	virtio_gpu_apply();
 }
 
+static volatile uint32 *get_pixel_addr(uint16 x, uint16 y, int i, int j)
+{
+	return &gpu.fb_addr[PAGE(x + j, y + i, gpu)][COORD(x + j, y + i, gpu)];
+}
+
 void draw_fill(uint16 x, uint16 y, uint16 width, uint16 height, uint32 color)
 {
 	if (!gpu.fb_addr)
@@ -327,18 +332,38 @@ void draw_fill(uint16 x, uint16 y, uint16 width, uint16 height, uint32 color)
 
 	for (int i = 0; i < height && y + i < gpu.height; i++)
 		for (int j = 0; j < width && x + j < gpu.width; j++)
-			gpu.fb_addr[PAGE(x + j, y + i, gpu)][COORD(x + j, y + i, gpu)] = color;
+			*get_pixel_addr(x, y, i, j) = color;
 
 	virtio_gpu_apply();
 }
 
-void draw_bits(uint16 x, uint16 y, uint16 width, uint16 height, uint32 *bits)
+void draw_bits(uint16 x, uint16 y, uint16 width, uint16 height, uint32 *bits, int size)
 {
 	if (!gpu.fb_addr)
 		panic("fb is null!");
 	else if (gpu_panicked)
 		for (;;);
 
+	for (int i = 0; i < height && y + i < gpu.height; i++)
+		for (int j = 0; j < width && x + j < gpu.width; j++)
+			if (i * gpu.width + j <= size)
+				*get_pixel_addr(x, y, i, j) = bits[i * gpu.width + j];
+
+	virtio_gpu_apply();
+}
+
+// THIS IS TEMPORARY!!
+// MUST BE FIXED!!
+void draw_cursor(uint32 orig_x, uint32 orig_y, uint32 x, uint32 y)
+{
+	int i, j;
+
+	for (i = 0; i < 50; i++)
+		for (j = 0; j < 50; j++)
+		{
+			if (i > j && y + i > 0 && x + j > 0 && y + i < gpu.height && x + j < gpu.width)
+				*get_pixel_addr(x, y, i, j) = RGB(255, 0, 0);
+		}
 
 	virtio_gpu_apply();
 }

@@ -189,7 +189,8 @@ void            virtio_disk_intr(void);
 // virtio_gpu.c
 void		virtio_gpu_init(void);
 void 		draw_fill(uint16, uint16, uint16, uint16, uint32);
-void 		draw_bits(uint16, uint16, uint16, uint16, uint32*);
+void 		draw_bits(uint16, uint16, uint16, uint16, uint32*, int);
+void		draw_cursor(uint32, uint32, uint32, uint32);
 void 		gpu_panic(char*);
 
 // virtio_mouse.c

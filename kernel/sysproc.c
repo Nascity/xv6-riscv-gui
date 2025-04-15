@@ -117,17 +117,19 @@ sys_draw_bits(void)
 {
 	int x, y, w, h;
 	uint64 bits;
+	int size;
 
 	argint(0, &x);
 	argint(1, &y);
 	argint(2, &w);
 	argint(3, &h);
 	argaddr(4, &bits);
+	argint(5, &size);
 	
 	if (x < 0 || y < 0 || w < 0 || h < 0)
 		return -1;
 
-	draw_bits(x, y, w, h, (uint32*)bits);
+	draw_bits(x, y, w, h, (uint32*)bits, size);
 	
 	return 0;
 }

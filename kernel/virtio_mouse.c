@@ -9,7 +9,7 @@
 #include "spinlock.h"
 #include "virtio.h"
 #include "graphics.h"
-#include "mouse.h"
+#include "input_events.h"
 
 // the address of virtio mmio register r.
 #define R(r)	((volatile uint32 *)(VIRTIO2 + (r)))
@@ -26,6 +26,8 @@ static struct mouse
 	// the location of the mouse pointer
 	uint32 x;
 	uint32 y;
+	uint32 orig_x;
+	uint32 orig_y;
 
 	uint32 used_idx;
 
@@ -104,6 +106,10 @@ virtio_mouse_init(void)
 	*R(VIRTIO_MMIO_QUEUE_READY) = 0x1;
 
 	mouse.used_idx = 0;
+	mouse.x = 1280 / 2;
+	mouse.y = 800 / 2;
+	mouse.orig_x = mouse.x;
+	mouse.orig_y = mouse.y;
 
 	printf("mouse initialized\n");
 }
@@ -122,7 +128,14 @@ virtio_mouse_intr(void)
 		struct virtio_input_event *event =
 			(struct virtio_input_event*)mouse.desc[id].addr;
 
-		printf("type: %d code: %d value: %d\n", event->type, event->code, event->value);
+		if (event->type == EV_REL)
+		{
+			if (event->code == REL_X)
+				mouse.x += event->value;
+			else if (event->code == REL_Y)
+				mouse.y += event->value;
+			draw_cursor(mouse.orig_x, mouse.orig_y, mouse.x, mouse.y);
+		}
 
 		mouse.avail->ring[mouse.avail->idx % NUM] = id;
 		__sync_synchronize();

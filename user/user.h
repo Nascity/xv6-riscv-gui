@@ -24,7 +24,7 @@ int sleep(int);
 int uptime(void);
 
 int draw_fill(uint16, uint16, uint16, uint16, uint32);
-int draw_bits(uint16, uint16, uint16, uint16, uint32*);
+int draw_bits(uint16, uint16, uint16, uint16, uint32*, int);
 int send_msg(int, void*, int);
 int recv_msg(void*, int, int);
 
