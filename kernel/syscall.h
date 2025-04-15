@@ -26,3 +26,4 @@
 #define SYS_draw_bits	23
 #define SYS_send_msg	24
 #define SYS_recv_msg	25
+#define SYS_register_wm	26

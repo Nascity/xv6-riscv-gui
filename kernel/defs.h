@@ -9,6 +9,18 @@ struct sleeplock;
 struct stat;
 struct superblock;
 
+// not proud of this part
+// but it has to be done
+#define MSG_SZ	128
+#define MAX_MSG (MSG_SZ - sizeof(uint64))
+#define Q_SZ	(PGSIZE / MAX_MSG)
+
+struct msg
+{
+	uint64 size;
+	uint8 msg[MAX_MSG];
+};
+
 // bio.c
 void            binit(void);
 struct buf*     bread(uint, uint);
@@ -106,7 +118,8 @@ void            yield(void);
 int             either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
 int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
-struct proc*	 findproc(int pid);
+struct proc*	findproc(int pid);
+uint64		register_wm(void);
 
 // swtch.S
 void            swtch(struct context*, struct context*);
@@ -198,8 +211,8 @@ void		virtio_mouse_init(void);
 void		virtio_mouse_intr(void);
 
 // msg.c
-int		send_msg(int, uint64, int);
-int		recv_msg(uint64, int, int);
+int		send_msg(struct proc*, char*, int);
+struct msg*	recv_msg(struct proc*, char*, int, int);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

@@ -145,9 +145,42 @@ sys_send_msg(void)
 	argaddr(1, &user_buf);
 	argint(2, &size);
 
-	return send_msg(pid, user_buf, size);
+	// before entering proc
+	// this has to be done because
+	// we want to use send_msg function
+	// both in user and kernel mode app
+	struct proc *p;
+	
+	// find the struct proc* of the corresponding pid
+	p = findproc(pid);
+	if (!p)
+		return -1;
+
+	// allocate new queue when empty
+	acquire(&p->lock);
+	if (!p->msg_queue)
+	{
+		p->msg_queue = (uint64)kalloc();
+		if (!p->msg_queue)
+			panic("send_msg - p->msg_queue alloc failed");
+	}
+	release(&p->lock);
+
+	// move user mem to kernel memory
+	char* kernel_buf;
+
+	kernel_buf = (char*)kalloc();
+	if (!kernel_buf)
+		panic("send_msg - kernel_buf alloc failed");
+	if (copyin(p->pagetable, kernel_buf, user_buf, Q_SZ))
+		panic("send_msg - copyin failed");
+
+	return send_msg(p, kernel_buf, size);
 }
 
+// LOCK IS VERY DANGEROUS!!
+// IF MESSAGE PASSING FAILS,
+// THIS IS THE CULPRIT!!
 uint64
 sys_recv_msg(void)
 {
@@ -159,5 +192,19 @@ sys_recv_msg(void)
 	argint(1, &size);
 	argint(2, &timeout);
 
-	return recv_msg(user_buf, size, timeout);
+	struct proc *p = myproc();
+	struct msg *pm = recv_msg(p, (char*)user_buf, size, timeout);
+
+	if ((long long)pm < 0)
+		return -1;
+	if (copyout(p->pagetable, user_buf, (char*)pm->msg, pm->size))
+		panic("recv_msg - copyout failed");
+
+	return 0;
+}
+
+uint64
+sys_register_wm(void)
+{
+	return register_wm();
 }

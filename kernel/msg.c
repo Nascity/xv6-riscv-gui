@@ -16,21 +16,15 @@
 
 // error codes
 #define MSG_Q_OK		0
-#define MSG_Q_EMPTY		-1
-#define MSG_Q_FULL		-2
-#define MSG_Q_TIMEOUT		-3
-#define MSG_Q_UNKNOWN		-4
-#define MSG_Q_PROC_NOT_FOUND	-5
+#define MSG_Q_PROC_NOT_FOUND	-1
+#define MSG_Q_EMPTY		-2
+#define MSG_Q_FULL		-3
+#define MSG_Q_TIMEOUT		-4
+#define MSG_Q_UNKNOWN		-5
 
 // timeout
 #define TIMEOUT		-1
 #define INFINITE	-1
-
-struct msg
-{
-	uint64 size;
-	uint8 msg[MAX_MSG];
-};
 
 struct spinlock ticks_lock;
 
@@ -39,36 +33,13 @@ static void write_wait(struct proc*);
 
 extern uint ticks;
 
-int send_msg(int target_pid, uint64 user_buf, int size)
+int send_msg(struct proc *p, char *kernel_buf, int size)
 {
-	struct proc *p;
-	char* kernel_buf;
-
-	// find the struct proc* of the corresponding pid
-	p = findproc(target_pid);
-	if (!p)
-		return MSG_Q_PROC_NOT_FOUND;
-
 	// acquire write lock
 	acquire(&p->write_lock);
 	
-	// allocate new queue when empty
-	acquire(&p->lock);
-	if (!p->msg_queue)
-	{
-		p->msg_queue = (uint64)kalloc();
-		if (!p->msg_queue)
-			panic("send_msg - p->msg_queue alloc failed");
-	}
-	release(&p->lock);
+	// wait for the buffer to be empty
 	write_wait(p);
-
-	// move user mem to kernel memory
-	kernel_buf = (char*)kalloc();
-	if (!kernel_buf)
-		panic("send_msg - kernel_buf alloc failed");
-	if (copyin(p->pagetable, kernel_buf, user_buf, Q_SZ))
-		panic("send_msg - copyin failed");
 	
 	// move kernel memory to queue
 	struct msg *pm = &((struct msg*)p->msg_queue)[p->writeptr];
@@ -85,28 +56,25 @@ int send_msg(int target_pid, uint64 user_buf, int size)
 }
 
 // timeout is in seconds
-int recv_msg(uint64 user_buf, int size, int timeout)
+struct msg *recv_msg(struct proc *p, char *kernel_buf, int size, int timeout)
 {
-	struct proc *p = myproc();
-
 	acquire(&p->read_lock);
 	if (!read_wait(p, timeout))
 	{
 		release(&p->read_lock);
-		return MSG_Q_TIMEOUT;
+		return (struct msg*)MSG_Q_TIMEOUT;
 	}
 
-	// move kernel memory to user memory
 	struct msg *pm = &((struct msg*)p->msg_queue)[p->readptr];
-	if (copyout(p->pagetable, user_buf, (char*)pm->msg, pm->size))
-		panic("recv_msg - copyout failed");
 
 	// increment readptr
 	p->readptr = (p->readptr + 1) % Q_SZ;
 
+	// kinda feel dangerous to release here...
+	// hope nothing bad happens
 	release(&p->lock);
 	release(&p->read_lock);
-	return MSG_Q_OK;
+	return pm;
 }
 
 int read_wait(struct proc *p, int timeout)

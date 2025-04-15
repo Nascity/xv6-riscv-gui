@@ -352,22 +352,6 @@ void draw_bits(uint16 x, uint16 y, uint16 width, uint16 height, uint32 *bits, in
 	virtio_gpu_apply();
 }
 
-// THIS IS TEMPORARY!!
-// MUST BE FIXED!!
-void draw_cursor(uint32 orig_x, uint32 orig_y, uint32 x, uint32 y)
-{
-	int i, j;
-
-	for (i = 0; i < 50; i++)
-		for (j = 0; j < 50; j++)
-		{
-			if (i > j && y + i > 0 && x + j > 0 && y + i < gpu.height && x + j < gpu.width)
-				*get_pixel_addr(x, y, i, j) = RGB(255, 0, 0);
-		}
-
-	virtio_gpu_apply();
-}
-
 void gpu_panic(char *msg)
 {
 	if (!gpu.fb_addr)

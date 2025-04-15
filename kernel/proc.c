@@ -11,6 +11,7 @@ struct cpu cpus[NCPU];
 struct proc proc[NPROC];
 
 struct proc *initproc;
+struct proc *xvxwm;
 
 int nextpid = 1;
 struct spinlock pid_lock;
@@ -722,5 +723,19 @@ findproc(int pid)
 		release(&p->lock);
 	}
 
+	return 0;
+}
+
+uint64
+register_wm(void)
+{
+	if (xvxwm)
+		return -1;
+
+	xvxwm = myproc();
+	if (!xvxwm)
+		return -1;
+
+	printf("wm registered\n");
 	return 0;
 }

@@ -106,6 +106,7 @@ extern uint64 sys_draw_fill(void);
 extern uint64 sys_draw_bits(void);
 extern uint64 sys_send_msg(void);
 extern uint64 sys_recv_msg(void);
+extern uint64 sys_register_wm(void);
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -134,7 +135,8 @@ static uint64 (*syscalls[])(void) = {
 [SYS_draw_fill]	sys_draw_fill,
 [SYS_draw_bits] sys_draw_bits,
 [SYS_send_msg]	sys_send_msg,
-[SYS_recv_msg]	sys_recv_msg
+[SYS_recv_msg]	sys_recv_msg,
+[SYS_register_wm]	sys_register_wm,
 };
 
 void

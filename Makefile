@@ -1,5 +1,6 @@
 K=kernel
 U=user
+X=user/xvxwm
 
 OBJS = \
   $K/entry.o \
@@ -143,7 +144,8 @@ UPROGS=\
 	$U/_wc\
 	$U/_zombie\
 	$U/_graphic_test\
-	$U/_sender
+	$U/_sender\
+	$X/_wm
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)

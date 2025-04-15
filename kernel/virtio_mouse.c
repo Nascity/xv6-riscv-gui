@@ -134,7 +134,6 @@ virtio_mouse_intr(void)
 				mouse.x += event->value;
 			else if (event->code == REL_Y)
 				mouse.y += event->value;
-			draw_cursor(mouse.orig_x, mouse.orig_y, mouse.x, mouse.y);
 		}
 
 		mouse.avail->ring[mouse.avail->idx % NUM] = id;
