@@ -226,6 +226,12 @@ The device was initialized successfully, but the kernel wasn't able to pick up t
 
 I've spent a lot of time debugging and finding the solution for this, but failed and decided to ask on SO.
 
+Credits to [@Craig Estey](https://stackoverflow.com/users/5382650/craig-estey) on Stack Overflow - the IRQ number should have been set to 3 for mouse device.
+
+I'm feeling sick today, so am gonna be ending my programming session on this note.
+
+To future me, refer to this url: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/uapi/linux/input-event-codes.h
+
 # 7th day of dev (Apr 16, approx. 3h wasted)
 I modified the message passing function to support the calling from both kernel and user.
 
@@ -238,10 +244,3 @@ I think I need to modify `mkfs.c` to make it support subdirectories.
 I see nightmares ahead.
 
 ![image](https://github.com/user-attachments/assets/b895d569-24b3-434f-a73f-adb698e540ab)
-
-
-Credits to [@Craig Estey](https://stackoverflow.com/users/5382650/craig-estey) on Stack Overflow - the IRQ number should have been set to 3 for mouse device.
-
-I'm feeling sick today, so am gonna be ending my programming session on this note.
-
-To future me, refer to this url: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/uapi/linux/input-event-codes.h
