@@ -213,6 +213,21 @@ I had to implement some operations related to PCI and stuff.
 
 And ChatGPT never helped me in this topic, unlike when I was programming GPU.
 
-Am trying to fallback to using MMIO device like `virtio-mouse-device`.
+Am trying to fall back to using MMIO device like `virtio-mouse-device`.
 
 I hope it works flawlessly.
+
+# 6th day of dev (Apr 15, approx. 5h wasted on mouse interrupts)
+![image](https://github.com/user-attachments/assets/5ea2a9ad-0bbd-4091-a1cd-da3b522e90c4)
+
+I used `virtio-mouse-device` instead of PCI one.
+
+The device was initialized successfully, but the kernel wasn't able to pick up the interrupt.
+
+I've spent a lot of time debugging and finding the solution for this, but failed and decided to ask on SO.
+
+Credits to [@Craig Estey](https://stackoverflow.com/users/5382650/craig-estey) on Stack Overflow - the IRQ number should have been set to 3 for mouse device.
+
+I'm feeling sick today, so am gonna be ending my programming session on this note.
+
+To future me, refer to this url: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/uapi/linux/input-event-codes.h
