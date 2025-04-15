@@ -226,6 +226,20 @@ The device was initialized successfully, but the kernel wasn't able to pick up t
 
 I've spent a lot of time debugging and finding the solution for this, but failed and decided to ask on SO.
 
+# 7th day of dev (Apr 16, approx. 3h wasted)
+I modified the message passing function to support the calling from both kernel and user.
+
+Now I am making window manager, or the graphical shell.
+
+But there's a problem: I put the shell in a subdirectory of `./user/` like `./user/xvxwm` - this let to mkfs being unable to put it in `fs.img`.
+
+I think I need to modify `mkfs.c` to make it support subdirectories.
+
+I see nightmares ahead.
+
+![image](https://github.com/user-attachments/assets/b895d569-24b3-434f-a73f-adb698e540ab)
+
+
 Credits to [@Craig Estey](https://stackoverflow.com/users/5382650/craig-estey) on Stack Overflow - the IRQ number should have been set to 3 for mouse device.
 
 I'm feeling sick today, so am gonna be ending my programming session on this note.
