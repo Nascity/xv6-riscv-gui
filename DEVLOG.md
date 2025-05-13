@@ -244,3 +244,16 @@ I think I need to modify `mkfs.c` to make it support subdirectories.
 I see nightmares ahead.
 
 ![image](https://github.com/user-attachments/assets/b895d569-24b3-434f-a73f-adb698e540ab)
+
+# 7th day of dev (May 13, approx. 4h lost while debugging a deadlock)
+Mouse events are now conveyed to the window manager.
+
+I encountered a deadlock during putting the mouse event in the queue and reading from it.
+
+Somehow, a printf function situated inside the window manager was the issue.
+
+I'm not thinking of making a keyboard, since this project is a 'proof-of concept' type of project.
+
+Showing that attaching GUI interface and mouse to an educational OS is what I want to show to people.
+
+Anyways, I decided not to modify `mkfs.c` - putting the files in the `user/` directory with some prefix will work.
