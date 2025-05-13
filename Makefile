@@ -144,7 +144,7 @@ UPROGS=\
 	$U/_zombie\
 	$U/_graphic_test\
 	$U/_sender\
-	$U/_wm
+	$U/_xvx_wm
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)

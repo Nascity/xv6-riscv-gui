@@ -175,7 +175,7 @@ sys_send_msg(void)
 	if (copyin(p->pagetable, kernel_buf, user_buf, Q_SZ))
 		panic("send_msg - copyin failed");
 
-	return send_msg(p, kernel_buf, size);
+	return send_msg(p, kernel_buf, size, 1);
 }
 
 // LOCK IS VERY DANGEROUS!!
@@ -207,4 +207,10 @@ uint64
 sys_register_wm(void)
 {
 	return register_wm();
+}
+
+uint64
+sys_unregister_wm(void)
+{
+	return unregister_wm();
 }

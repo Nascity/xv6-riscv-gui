@@ -120,6 +120,9 @@ int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
 struct proc*	findproc(int pid);
 uint64		register_wm(void);
+uint64		unregister_wm(void);
+
+void		send_msg_to_wm(int, int, int);
 
 // swtch.S
 void            swtch(struct context*, struct context*);
@@ -211,7 +214,7 @@ void		virtio_mouse_init(void);
 void		virtio_mouse_intr(void);
 
 // msg.c
-int		send_msg(struct proc*, char*, int);
+int		send_msg(struct proc*, char*, int, int);
 struct msg*	recv_msg(struct proc*, char*, int, int);
 
 // number of elements in fixed-size array

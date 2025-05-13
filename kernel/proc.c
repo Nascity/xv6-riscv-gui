@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "input_events.h"
 
 struct cpu cpus[NCPU];
 
@@ -738,4 +739,31 @@ register_wm(void)
 
 	printf("wm registered\n");
 	return 0;
+}
+
+uint64
+unregister_wm(void)
+{
+	if (xvxwm == myproc())
+		xvxwm = 0;
+	else
+		return -1;
+
+	printf("wm unregistered\n");
+	return 0;
+}
+
+void
+send_msg_to_wm(int type, int param0, int param1)
+{
+	struct wmmsg msg;
+
+	if (!xvxwm)
+		return;
+
+	msg.event_code = type;
+	msg.param0 = param0;
+	msg.param1 = param1;
+
+	send_msg(xvxwm, (char*)&msg, sizeof(struct wmmsg), 0);
 }

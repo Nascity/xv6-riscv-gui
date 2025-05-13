@@ -43,3 +43,4 @@ entry("draw_bits");
 entry("send_msg");
 entry("recv_msg");
 entry("register_wm");
+entry("unregister_wm");

@@ -383,4 +383,15 @@ struct virtio_input_event {
 #define REL_MAX			0x0f
 #define REL_CNT			(REL_MAX+1)
 
+#define X(param)		(((param) >> 16) & 0xFFFF)
+#define Y(param)		((param) & 0xFFFF)
+#define MAKEPARAM(x, y)		((((x) & 0xFFFF) << 16) + ((y) & 0xFFFF))
+
+struct wmmsg
+{
+	int event_code;
+	int param0;
+	int param1;
+};
+
 #endif

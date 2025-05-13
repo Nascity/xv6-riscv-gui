@@ -131,9 +131,38 @@ virtio_mouse_intr(void)
 		if (event->type == EV_REL)
 		{
 			if (event->code == REL_X)
+			{
 				mouse.x += event->value;
+				if (mouse.x < 0)
+					mouse.x = 0;
+				if (mouse.x > 1280)
+					mouse.x = 1280;
+			}
 			else if (event->code == REL_Y)
+			{
 				mouse.y += event->value;
+				if (mouse.y < 0)
+					mouse.y = 0;
+				if (mouse.y > 800)
+					mouse.y = 800;
+			}
+
+			send_msg_to_wm(EV_REL, MAKEPARAM(mouse.x, mouse.y), 0);
+		}
+		else if (event->type == EV_KEY)
+		{
+			// filter only left and right mouse click
+			// value == 0: released 1: pressed
+
+			switch (event->code)
+			{
+			case BTN_LEFT:
+			case BTN_RIGHT:
+				send_msg_to_wm(EV_KEY, MAKEPARAM(mouse.x, mouse.y), event->value);
+				break;
+			default:
+				break;
+			}
 		}
 
 		mouse.avail->ring[mouse.avail->idx % NUM] = id;

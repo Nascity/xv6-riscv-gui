@@ -26,14 +26,12 @@
 #define TIMEOUT		-1
 #define INFINITE	-1
 
-struct spinlock ticks_lock;
-
 static int read_wait(struct proc*, int);
 static void write_wait(struct proc*);
 
 extern uint ticks;
 
-int send_msg(struct proc *p, char *kernel_buf, int size)
+int send_msg(struct proc *p, char *kernel_buf, int size, int isalloced)
 {
 	// acquire write lock
 	acquire(&p->write_lock);
@@ -41,15 +39,24 @@ int send_msg(struct proc *p, char *kernel_buf, int size)
 	// wait for the buffer to be empty
 	write_wait(p);
 	
+	// allocate new queue when empty
+	if (!p->msg_queue)
+	{
+		p->msg_queue = (uint64)kalloc();
+		if (!p->msg_queue)
+			panic("send_msg - p->msg_queue alloc failed");
+	}
 	// move kernel memory to queue
 	struct msg *pm = &((struct msg*)p->msg_queue)[p->writeptr];
-	memmove(pm->msg, kernel_buf, Q_SZ);
+	memmove(pm->msg, kernel_buf, size);
 	pm->size = size;
 
 	// increment writeptr
 	p->writeptr = (p->writeptr + 1) % Q_SZ;
 
-	kfree(kernel_buf);
+	if (isalloced)
+		kfree(kernel_buf);
+	printf("write released\n");
 	release(&p->lock);
 	release(&p->write_lock);
 	return MSG_Q_OK;
@@ -72,6 +79,7 @@ struct msg *recv_msg(struct proc *p, char *kernel_buf, int size, int timeout)
 
 	// kinda feel dangerous to release here...
 	// hope nothing bad happens
+	printf("read released\n");
 	release(&p->lock);
 	release(&p->read_lock);
 	return pm;
@@ -82,21 +90,17 @@ int read_wait(struct proc *p, int timeout)
 	uint start;
 
 	// set 'start' atomically
-	acquire(&ticks_lock);
 	start = ticks;
-	release(&ticks_lock);
+	__sync_synchronize();
 
 	while (!p->msg_queue || p->readptr == p->writeptr)
 	{
-		acquire(&ticks_lock);
+		__sync_synchronize();
 		if (ticks - start >= timeout * TPS)
-		{
-			release(&ticks_lock);
 			return 0;
-		}
-		release(&ticks_lock);
 	}
 	__sync_synchronize();
+	printf("read is waiting to acquire\n");
 	acquire(&p->lock);
 
 	return 1;
@@ -106,5 +110,6 @@ void write_wait(struct proc *p)
 {
 	while (p->readptr == (p->writeptr + 1 % Q_SZ));
 	__sync_synchronize();
+	printf("write is waiting to acquire\n");
 	acquire(&p->lock);
 }

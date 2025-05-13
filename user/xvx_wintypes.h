@@ -36,45 +36,10 @@ struct win
 	int num_children;
 
 	// how to draw the window
-#define MAXIMIZE_BUTTON		0b0000'0001
-#define MINIMIZE_BUTTON		0b0000'0010
-#define BORDER			0b0000'0100
+#define MAXIMIZE_BUTTON		0b00000001
+#define MINIMIZE_BUTTON		0b00000010
+#define BORDER			0b00000100
 	int win_draw_type;
 };
-
-struct wincomponent
-{
-	// the type of the component
-#define FILL	0
-#define BUTTON	1
-#define BITMAP	2
-	int comp_type;
-
-	// position relative to the parent
-	int x;
-	int y;
-	int width;
-	int height;
-
-	// the parent
-	struct win *parent;
-
-	// the pointer to the actual component
-	void *comp;
-}
-
-struct fill_component
-{
-	// the color of the fill
-	int color;
-}
-
-struct button_component
-{
-	// the identifier
-	wincomp_t id;
-
-
-}
 
 #endif

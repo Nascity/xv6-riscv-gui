@@ -28,6 +28,7 @@ int draw_bits(uint16, uint16, uint16, uint16, uint32*, int);
 int send_msg(int, void*, int);
 int recv_msg(void*, int, int);
 int register_wm(void);
+int unregister_wm(void);
 
 // ulib.c
 int stat(const char*, struct stat*);
