@@ -346,8 +346,8 @@ void draw_bits(uint16 x, uint16 y, uint16 width, uint16 height, uint32 *bits, in
 
 	for (int i = 0; i < height && y + i < gpu.height; i++)
 		for (int j = 0; j < width && x + j < gpu.width; j++)
-			if (i * gpu.width + j <= size)
-				*get_pixel_addr(x, y, i, j) = bits[i * gpu.width + j];
+			if (i * width + j <= size)
+				*get_pixel_addr(x, y, i, j) = bits[i * width + j];
 
 	virtio_gpu_apply();
 }

@@ -56,7 +56,6 @@ int send_msg(struct proc *p, char *kernel_buf, int size, int isalloced)
 
 	if (isalloced)
 		kfree(kernel_buf);
-	printf("write released\n");
 	release(&p->lock);
 	release(&p->write_lock);
 	return MSG_Q_OK;
@@ -79,7 +78,6 @@ struct msg *recv_msg(struct proc *p, char *kernel_buf, int size, int timeout)
 
 	// kinda feel dangerous to release here...
 	// hope nothing bad happens
-	printf("read released\n");
 	release(&p->lock);
 	release(&p->read_lock);
 	return pm;
@@ -100,7 +98,6 @@ int read_wait(struct proc *p, int timeout)
 			return 0;
 	}
 	__sync_synchronize();
-	printf("read is waiting to acquire\n");
 	acquire(&p->lock);
 
 	return 1;
@@ -110,6 +107,5 @@ void write_wait(struct proc *p)
 {
 	while (p->readptr == (p->writeptr + 1 % Q_SZ));
 	__sync_synchronize();
-	printf("write is waiting to acquire\n");
 	acquire(&p->lock);
 }
