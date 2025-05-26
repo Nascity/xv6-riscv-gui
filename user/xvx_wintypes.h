@@ -1,8 +1,7 @@
 #ifndef __WINTYPES_H__
 #define __WINTYPES_H__
 
-#define RGB(r, g, b)	((((r) & 0xFF) << 16) + (((g) & 0xFF) << 8) + ((b) & 0xFF))
-#define THEME_COLOR	RGB(0x00, 0xD5, 0xFF)
+#include "xvx_windefs.h"
 
 typedef int winident_t;
 typedef int wincomp_t;
@@ -24,8 +23,6 @@ struct win
 	// position relative to parent struct win
 	int x;
 	int y;
-#define MONITOR_WIDTH	1280
-#define MONITOR_HEIGHT	800
 	int width;
 	int height;
 
@@ -36,10 +33,14 @@ struct win
 	int num_children;
 
 	// how to draw the window
-#define MAXIMIZE_BUTTON		0b00000001
-#define MINIMIZE_BUTTON		0b00000010
+#define MAXIMIZE_BUTTON		0b00001001
+#define MINIMIZE_BUTTON		0b00001010
 #define BORDER			0b00000100
+#define UPPER_BAR		0b00001000
+#define SHELL_TEST		0b00001111	// only for test purpose
 	int win_draw_type;
+
+	int rendered;
 };
 
 #endif

@@ -15,7 +15,6 @@ int shell_index;
 int recv_kernel_msg(struct wmmsg* pmsg);
 
 // window operations
-#define BACKGROUND_COLOR	RGB(0, 100, 255)
 void init_wm(void);
 void exit_wm(int);
 
@@ -29,6 +28,7 @@ void update_cursor(int x, int y);
 void click_cursor(int x, int y, int pressed);
 
 void invalidate_region(int x, int y, int width, int height);
+void render(void);
 
 int screen_buffer[MONITOR_HEIGHT][MONITOR_WIDTH];
 
@@ -57,7 +57,8 @@ int main(int argc, char *argv[])
 	register_wm();
 	init_wm();
 
-	shell_index = register_window("XvX shell", 0, 0, 0, MONITOR_WIDTH, MONITOR_HEIGHT, 0, BORDER);
+	shell_index = register_window("XvX shell", 0, 0, 0,
+			MONITOR_WIDTH, MONITOR_HEIGHT, 0, SHELL_TEST);
 	if (shell_index == -1)
 	{
 		printf("Cannot register shell window.\n");
@@ -80,6 +81,8 @@ int main(int argc, char *argv[])
 			click_cursor(X(msg.param0), Y(msg.param0), msg.param1);
 			break;
 		}
+
+		render();
 	}
 }
 
@@ -105,8 +108,8 @@ void draw_rect(int x, int y, int width, int height, int rgb)
 {
 	int i, j;
 
-	for (i = y; i < height && i < MONITOR_HEIGHT; i++)
-		for (j = x; j < width && j < MONITOR_WIDTH; j++)
+	for (i = y; i < y + height && i < MONITOR_HEIGHT; i++)
+		for (j = x; j < x + width && j < MONITOR_WIDTH; j++)
 			if (i > 0 && j > 0)
 				screen_buffer[i][j] = rgb;
 }
@@ -175,7 +178,13 @@ void invalidate_region(int x, int y, int width, int height)
 		for (j = 0; j < width && x + j < MONITOR_WIDTH; j++)
 			buf[i * width + j] = screen_buffer[i + y][j + x];
 
-	draw_bits(x, y, width, height, (uint32*)buf, width * height);
+	if (width * height > 4096)
+		for (i = 0; i < (height % 64 == 0 ? height / 64 : height / 64 + 1); i++)
+			for (j = 0; j < (width % 64 == 0 ? width / 64 : width / 64 + 1); j++)
+				draw_bits(x + j * 64, y + i * 64, 64, 64,
+						&((uint32*)buf)[i * 64 + j], 4096);
+	else
+		draw_bits(x, y, width, height, (uint32*)buf, width * height);
 
 	free(buf);
 }
@@ -215,7 +224,35 @@ int register_window(const char *title, int owner, int x, int y, int width, int h
 	ptr->height = height;
 	ptr->parent = &windows[parent];
 	ptr->num_children = 0;
+	ptr->win_draw_type = draw_type;
+	ptr->rendered = 0;
 	strcpy(ptr->title, title);
 
 	return i;
+}
+
+void render(void)
+{
+	int i;
+	struct win *pw;
+
+	for (i = 0; i < MAX_WINDOWS; i++)
+	{
+		pw = &windows[i];
+		if (pw->id == NO_WINIDENT || pw->rendered)
+			continue;
+
+		// window background and border
+		if (pw->win_draw_type && BORDER)
+		{
+		draw_rect(pw->x, pw->y, pw->width, pw->height, WINDOW_BORDER_COLOR);
+		draw_rect(pw->x + BORDER_THICKNESS, pw->y + BORDER_THICKNESS,
+				pw->width - BORDER_THICKNESS, pw->height - BORDER_THICKNESS,
+				WINDOW_BACKGROUND_COLOR);
+		}
+
+		pw->rendered = 1;
+
+		invalidate_region(0, 0, 1280, 800);
+	}
 }

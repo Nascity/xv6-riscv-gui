@@ -24,10 +24,10 @@ static struct mouse
 	struct spinlock mouse_lock;
 
 	// the location of the mouse pointer
-	uint32 x;
-	uint32 y;
-	uint32 orig_x;
-	uint32 orig_y;
+	int x;
+	int y;
+	int orig_x;
+	int orig_y;
 
 	uint32 used_idx;
 
@@ -133,18 +133,18 @@ virtio_mouse_intr(void)
 			if (event->code == REL_X)
 			{
 				mouse.x += event->value;
-				if (mouse.x < 0)
-					mouse.x = 0;
 				if (mouse.x > 1280)
 					mouse.x = 1280;
+				else if (mouse.y < 0)
+					mouse.x = 0;
 			}
 			else if (event->code == REL_Y)
 			{
 				mouse.y += event->value;
-				if (mouse.y < 0)
-					mouse.y = 0;
 				if (mouse.y > 800)
 					mouse.y = 800;
+				else if (mouse.y < 0)
+					mouse.y = 0;
 			}
 
 			send_msg_to_wm(EV_REL, MAKEPARAM(mouse.x, mouse.y), 0);
