@@ -257,3 +257,8 @@ I'm not thinking of making a keyboard, since this project is a 'proof-of concept
 Showing that attaching GUI interface and mouse to an educational OS is what I want to show to people.
 
 Anyways, I decided not to modify `mkfs.c` - putting the files in the `user/` directory with some prefix will work.
+
+# 8th day of dev (May 30, apporx. 5h lost)
+![image](https://github.com/user-attachments/assets/cf6e6e1c-8890-43bb-b973-e258d5641a18)
+
+Now we can render windows.
