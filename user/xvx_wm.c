@@ -50,6 +50,27 @@ char *cursor[] = {
 int last_pos_x;
 int last_pos_y;
 
+// text
+char *uppercase[26] = {
+	"ooooo",
+	"o   o",
+	"ooooo",
+	"o   o",
+	"o   o",
+
+	"oooo ",
+	"o   o",
+	"oooo ",
+	"o   o",
+	"oooo ",
+
+	" oooo",
+	"o    ",
+	"o    ",
+	"o    ",
+	" oooo",
+};
+
 
 
 int main(int argc, char *argv[])
@@ -57,8 +78,11 @@ int main(int argc, char *argv[])
 	register_wm();
 	init_wm();
 
+	/*
 	shell_index = register_window("XvX shell", 0, 0, 0,
 			MONITOR_WIDTH, MONITOR_HEIGHT, 0, SHELL_TEST);
+			*/
+	shell_index = register_window("XvX shell", 0, 390, 250, 500, 300, 0, SHELL_TEST);
 	if (shell_index == -1)
 	{
 		printf("Cannot register shell window.\n");
@@ -173,20 +197,29 @@ void invalidate_region(int x, int y, int width, int height)
 		y = 0;
 	}
 
- 	buf = malloc(width * height * sizeof(int));
-	for (i = 0; i < height && y + i < MONITOR_HEIGHT; i++)
-		for (j = 0; j < width && x + j < MONITOR_WIDTH; j++)
-			buf[i * width + j] = screen_buffer[i + y][j + x];
-
-	if (width * height > 4096)
-		for (i = 0; i < (height % 64 == 0 ? height / 64 : height / 64 + 1); i++)
-			for (j = 0; j < (width % 64 == 0 ? width / 64 : width / 64 + 1); j++)
-				draw_bits(x + j * 64, y + i * 64, 64, 64,
-						&((uint32*)buf)[i * 64 + j], 4096);
-	else
+	if (width * height <= 4096)
+	{
+		buf = malloc(width * height * sizeof(int));
+		for (i = 0; i < height; i++)
+			for (j = 0; j < width; j++)
+				buf[i * width + j] = screen_buffer[i + y][j + x];
 		draw_bits(x, y, width, height, (uint32*)buf, width * height);
+		free(buf);
+	}
+	else
+	{
+		int grid_x, grid_y;
 
-	free(buf);
+		grid_x = width % 32 == 0 ? width / 32 : width / 32 + 1;
+		grid_y = height % 32 == 0 ? height / 32 : height / 32 + 1;
+
+		for (i = 0; i < grid_y; i++)
+			for (j = 0; j < grid_x; j++)
+			{
+				invalidate_region(x + j * 32, y + i * 32, 32, 32);
+			}
+	}
+
 }
 
 // receives kernel message and returns it via pointer
@@ -225,16 +258,44 @@ int register_window(const char *title, int owner, int x, int y, int width, int h
 	ptr->parent = &windows[parent];
 	ptr->num_children = 0;
 	ptr->win_draw_type = draw_type;
+	ptr->maximized = 0;
 	ptr->rendered = 0;
 	strcpy(ptr->title, title);
 
 	return i;
 }
 
+void render_top_bar(int x, int y, int width, int draw_type)
+{
+	// bar
+	draw_rect(x, y, width, TOP_BAR_HEIGHT, THEME_COLOR);
+	// exit
+	draw_rect(x + width - TOP_BAR_BUTTON_SIZE + TOP_BAR_BUTTON_MARGIN,
+			y + TOP_BAR_BUTTON_MARGIN,
+			TOP_BAR_BUTTON_SIZE - TOP_BAR_BUTTON_MARGIN * 2,
+			TOP_BAR_BUTTON_SIZE - TOP_BAR_BUTTON_MARGIN * 2,
+			EXIT_BUTTON_COLOR);
+	// maximize
+	if (draw_type & MAXIMIZE_BUTTON)
+		draw_rect(x + width - 2 * TOP_BAR_BUTTON_SIZE + TOP_BAR_BUTTON_MARGIN,
+				y + TOP_BAR_BUTTON_MARGIN,
+				TOP_BAR_BUTTON_SIZE - TOP_BAR_BUTTON_MARGIN * 2,
+				TOP_BAR_BUTTON_SIZE - TOP_BAR_BUTTON_MARGIN * 2,
+				MAX_BUTTON_COLOR);
+	// minimize
+	if (draw_type & MINIMIZE_BUTTON)
+		draw_rect(x + width - 3 * TOP_BAR_BUTTON_SIZE + TOP_BAR_BUTTON_MARGIN,
+				y + TOP_BAR_BUTTON_MARGIN,
+				TOP_BAR_BUTTON_SIZE - TOP_BAR_BUTTON_MARGIN * 2,
+				TOP_BAR_BUTTON_SIZE - TOP_BAR_BUTTON_MARGIN * 2,
+				MIN_BUTTON_COLOR);
+}
+
 void render(void)
 {
 	int i;
 	struct win *pw;
+	int x, y, width, height;
 
 	for (i = 0; i < MAX_WINDOWS; i++)
 	{
@@ -242,17 +303,35 @@ void render(void)
 		if (pw->id == NO_WINIDENT || pw->rendered)
 			continue;
 
-		// window background and border
-		if (pw->win_draw_type && BORDER)
+		// window minized
+		if (pw->maximized)
 		{
-		draw_rect(pw->x, pw->y, pw->width, pw->height, WINDOW_BORDER_COLOR);
-		draw_rect(pw->x + BORDER_THICKNESS, pw->y + BORDER_THICKNESS,
-				pw->width - BORDER_THICKNESS, pw->height - BORDER_THICKNESS,
+			x = 0;
+			y = 0;
+			width = MONITOR_WIDTH;
+			height = MONITOR_WIDTH;
+		}
+		else
+		{
+			x = pw->x;
+			y = pw->y;
+			width = pw->width;
+			height = pw->height;
+		}
+
+		// window background and border
+		if (pw->win_draw_type & BORDER)
+		{
+			draw_rect(x, y, width, height, WINDOW_BORDER_COLOR);
+			draw_rect(x + BORDER_THICKNESS, y + BORDER_THICKNESS,
+				width - 2 * BORDER_THICKNESS, height - 2 * BORDER_THICKNESS,
 				WINDOW_BACKGROUND_COLOR);
 		}
 
-		pw->rendered = 1;
+		// make top bar
+		render_top_bar(x, y, width, pw->win_draw_type);
 
-		invalidate_region(0, 0, 1280, 800);
+		invalidate_region(x, y, width, height);
+		pw->rendered = 1;
 	}
 }

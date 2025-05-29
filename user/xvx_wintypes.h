@@ -25,7 +25,7 @@ struct win
 	int y;
 	int width;
 	int height;
-
+	
 	// parent - null if shell - and children
 #define MAX_CHILD	50
 	struct win *parent;
@@ -40,6 +40,7 @@ struct win
 #define SHELL_TEST		0b00001111	// only for test purpose
 	int win_draw_type;
 
+	int maximized;
 	int rendered;
 };
 
