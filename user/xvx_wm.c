@@ -10,9 +10,10 @@ struct win windows[MAX_WINDOWS];
 winident_t id_track;
 int shell_index;
 
-// event operations
+// msg operations
 #define TIMEOUT		10
 int recv_kernel_msg(struct wmmsg* pmsg);
+void send_msg_to_proc(int pid, int code, int param0, int param1);
 
 // window operations
 void init_wm(void);
@@ -51,24 +52,162 @@ int last_pos_x;
 int last_pos_y;
 
 // text
-char *uppercase[26] = {
-	"ooooo",
-	"o   o",
-	"ooooo",
-	"o   o",
-	"o   o",
+char *charmap[] = {
+    " ooo ",
+    "o   o",
+    "ooooo",
+    "o   o",
+    "o   o",
 
-	"oooo ",
-	"o   o",
-	"oooo ",
-	"o   o",
-	"oooo ",
+    "oooo ",
+    "o   o",
+    "oooo ",
+    "o   o",
+    "oooo ",
 
-	" oooo",
-	"o    ",
-	"o    ",
-	"o    ",
-	" oooo",
+    " oooo",
+    "o    ",
+    "o    ",
+    "o    ",
+    " oooo",
+
+    "oooo ",
+    "o   o",
+    "o   o",
+    "o   o",
+    "oooo ",
+
+    "ooooo",
+    "o    ",
+    "oooo ",
+    "o    ",
+    "ooooo",
+
+    "ooooo",
+    "o    ",
+    "oooo ",
+    "o    ",
+    "o    ",
+
+    " oooo",
+    "o    ",
+    "o ooo",
+    "o   o",
+    " oooo",
+
+    "o   o",
+    "o   o",
+    "ooooo",
+    "o   o",
+    "o   o",
+
+    " ooo ",
+    "  o  ",
+    "  o  ",
+    "  o  ",
+    " ooo ",
+
+    "    o",
+    "    o",
+    "    o",
+    "o   o",
+    " ooo ",
+
+    "o   o",
+    "o  o ",
+    "ooo  ",
+    "o  o ",
+    "o   o",
+
+    "o    ",
+    "o    ",
+    "o    ",
+    "o    ",
+    "ooooo",
+
+    "o   o",
+    "oo oo",
+    "o o o",
+    "o   o",
+    "o   o",
+
+    "o   o",
+    "oo  o",
+    "o o o",
+    "o  oo",
+    "o   o",
+
+    " ooo ",
+    "o   o",
+    "o   o",
+    "o   o",
+    " ooo ",
+
+    "oooo ",
+    "o   o",
+    "oooo ",
+    "o    ",
+    "o    ",
+
+    " ooo ",
+    "o   o",
+    "o   o",
+    "o  o ",
+    " oo o",
+
+    "oooo ",
+    "o   o",
+    "oooo ",
+    "o  o ",
+    "o   o",
+
+    " oooo",
+    "o    ",
+    " ooo ",
+    "    o",
+    "oooo ",
+
+    "ooooo",
+    "  o  ",
+    "  o  ",
+    "  o  ",
+    "  o  ",
+
+    "o   o",
+    "o   o",
+    "o   o",
+    "o   o",
+    " oooo",
+
+    "o   o",
+    "o   o",
+    "o   o",
+    " o o ",
+    "  o  ",
+
+    "o   o",
+    "o   o",
+    "o o o",
+    "oo oo",
+    "o   o",
+
+    "o   o",
+    " o o ",
+    "  o  ",
+    " o o ",
+    "o   o",
+
+    "o   o",
+    "o   o",
+    " oooo",
+    "    o",
+    "oooo ",
+
+    "ooooo",
+    "   o ",
+    "  o  ",
+    " o   ",
+    "ooooo"
 };
 
 
@@ -82,7 +221,8 @@ int main(int argc, char *argv[])
 	shell_index = register_window("XvX shell", 0, 0, 0,
 			MONITOR_WIDTH, MONITOR_HEIGHT, 0, SHELL_TEST);
 			*/
-	shell_index = register_window("XvX shell", 0, 390, 250, 500, 300, 0, SHELL_TEST);
+	shell_index = register_window("XvX shell", 0, 0, 0, MONITOR_WIDTH, MONITOR_HEIGHT, 0, NO_TOP_BAR);
+	register_window("Test window", 0, 390, 250, 500, 300, 0, DEFAULT_WINDOW);
 	if (shell_index == -1)
 	{
 		printf("Cannot register shell window.\n");
@@ -234,6 +374,17 @@ int recv_kernel_msg(struct wmmsg* pmsg)
 	return 0;
 }
 
+void send_msg_to_proc(int pid, int code, int param0, int param1)
+{
+	struct wmmsg msg;
+
+	msg.event_code = code;
+	msg.param0 = param0;
+	msg.param1 = param1;
+
+	send_msg(pid, &msg, sizeof(msg));
+}
+
 // registers a new window in windows array
 // returns the index of the array when success
 // returns -1 when failed
@@ -291,6 +442,33 @@ void render_top_bar(int x, int y, int width, int draw_type)
 				MIN_BUTTON_COLOR);
 }
 
+void render_components(struct win *pw)
+{
+	struct wincomponent *pwc;
+
+	for (pwc = pw->first; pwc; pwc = pwc->next)
+	{
+		switch (pwc->comp_type)
+		{
+		case FILL:
+			int color = ((struct fill_component)pwc->comp)->color;
+			draw_fill(pw->x + pwc->x, pw->y + pwc->y, pwc->width, pwc->height, color);
+			break;
+		case BUTTON:
+
+			break;
+		case ICON:
+
+			break;
+		case TEXT:
+
+			break;
+		default:
+			break;
+		}
+	}
+}
+
 void render(void)
 {
 	int i;
@@ -300,7 +478,7 @@ void render(void)
 	for (i = 0; i < MAX_WINDOWS; i++)
 	{
 		pw = &windows[i];
-		if (pw->id == NO_WINIDENT || pw->rendered)
+		if (pw->id == NO_WINIDENT || pw->rendered || pw->minimized)
 			continue;
 
 		// window minized
@@ -327,9 +505,14 @@ void render(void)
 				width - 2 * BORDER_THICKNESS, height - 2 * BORDER_THICKNESS,
 				WINDOW_BACKGROUND_COLOR);
 		}
+		else
+			draw_rect(x, y, width, height, WINDOW_BACKGROUND_COLOR);
 
 		// make top bar
-		render_top_bar(x, y, width, pw->win_draw_type);
+		if (!(pw->win_draw_type & NO_TOP_BAR))
+			render_top_bar(x, y, width, pw->win_draw_type);
+
+		render_components(pw);
 
 		invalidate_region(x, y, width, height);
 		pw->rendered = 1;

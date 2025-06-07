@@ -38,9 +38,15 @@ struct win
 #define BORDER			0b00000100
 #define UPPER_BAR		0b00001000
 #define SHELL_TEST		0b00001111	// only for test purpose
+#define DEFAULT_WINDOW		0b00001111
+#define NO_TOP_BAR		0b00010000
 	int win_draw_type;
 
+	// components
+	struct wincomponent *first;
+
 	int maximized;
+	int minimized;
 	int rendered;
 };
 
