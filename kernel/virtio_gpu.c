@@ -18,11 +18,11 @@ volatile int gpu_panicked = 0;
 static void virtio_gpu_fetch_display_info(void);
 static void virtio_gpu_create_resource(void);
 static void virtio_gpu_attach_memory(void);
-static void virtio_gpu_transfer(void);
-static void virtio_gpu_flush(void);
+static void virtio_gpu_transfer(int, int, int, int);
+static void virtio_gpu_flush(int, int, int, int);
 static void virtio_gpu_scanout(void);
 
-static void virtio_gpu_apply(void);
+static void virtio_gpu_apply(int, int, int, int);
 static void virtio_gpu_send(void*, int, void*, int, void*, int);
 static void virtio_gpu_check_or_die(char*, struct virtio_gpu_ctrl_hdr*, uint32);
 
@@ -40,7 +40,6 @@ static struct gpu
 
 	// lock for gpu operations
 	struct spinlock gpu_lock;
-	struct spinlock flush_lock;
 
 	// the dimension of the screen
 	uint32 width;
@@ -64,7 +63,6 @@ virtio_gpu_init(void)
 	uint32 vendor = *R(VIRTIO_MMIO_VENDOR_ID);
 
 	initlock(&gpu.gpu_lock, "gpu");
-	initlock(&gpu.flush_lock, "flush");
 
 	if (magic != 0x74726976 || vendor != 0x554d4551 || device != 16)
 	{
@@ -193,16 +191,16 @@ void virtio_gpu_attach_memory(void)
 	virtio_gpu_check_or_die("attach_memory", &resp, 0);
 }
 
-void virtio_gpu_transfer(void)
+void virtio_gpu_transfer(int x, int y, int width, int height)
 {
 	struct virtio_gpu_transfer_to_host_2d req = {
 		.hdr.type = VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D,
 		.resource_id = 1,
 		.r = {
-			.x = 0,
-			.y = 0,
-			.width = gpu.width,
-			.height = gpu.height
+			.x = x,
+			.y = y,
+			.width = width,
+			.height = height
 		},
 		.offset = 0
 	};
@@ -214,16 +212,16 @@ void virtio_gpu_transfer(void)
 	virtio_gpu_check_or_die("transer", gpu.resp_buf, 0);
 }
 
-void virtio_gpu_flush(void)
+void virtio_gpu_flush(int x, int y, int width, int height)
 {
 	struct virtio_gpu_resource_flush req = {
 		.hdr.type = VIRTIO_GPU_CMD_RESOURCE_FLUSH,
 		.resource_id = 1,
 		.r = {
-			.x = 0,
-			.y = 0,
-			.width = gpu.width,
-			.height = gpu.height
+			.x = x,
+			.y = y,
+			.width = width,
+			.height = height
 		}
 	};
 
@@ -305,12 +303,10 @@ void virtio_gpu_check_or_die(char *funcname, struct virtio_gpu_ctrl_hdr *resp, u
 	}
 }
 
-void virtio_gpu_apply(void)
+void virtio_gpu_apply(int x, int y, int width, int height)
 {
-	acquire(&gpu.flush_lock);
-	virtio_gpu_transfer();
-	virtio_gpu_flush();
-	release(&gpu.flush_lock);
+	virtio_gpu_transfer(x, y, width, height);
+	virtio_gpu_flush(x, y, width, height);
 }
 
 void write_ready_screen(void)
@@ -319,7 +315,7 @@ void write_ready_screen(void)
 		for (int j = 0; j < gpu.width; j++)
 			gpu.fb_addr[PAGE(j, i, gpu)][COORD(j, i, gpu)] = RGB(0, j % 256, i % 256);
 
-	virtio_gpu_apply();
+	virtio_gpu_apply(0, 0, gpu.width, gpu.height);
 }
 
 static volatile uint32 *get_pixel_addr(uint16 x, uint16 y, int i, int j)
@@ -337,7 +333,7 @@ void draw_fill(uint16 x, uint16 y, uint16 width, uint16 height, uint32 color)
 	for (int i = 0; i < height && y + i < gpu.height; i++)
 		for (int j = 0; j < width && x + j < gpu.width; j++)
 			*get_pixel_addr(x, y, i, j) = color;
-	virtio_gpu_apply();
+	virtio_gpu_apply(x, y, width, height);
 }
 
 void draw_bits(uint16 x, uint16 y, uint16 width, uint16 height, uint32 *bits, int size)
@@ -351,7 +347,7 @@ void draw_bits(uint16 x, uint16 y, uint16 width, uint16 height, uint32 *bits, in
 		for (int j = 0; j < width && x + j < gpu.width; j++)
 			if (i * width + j <= size)
 				*get_pixel_addr(x, y, i, j) = bits[i * width + j];
-	virtio_gpu_apply();
+	virtio_gpu_apply(0, 0, gpu.width, gpu.height);
 }
 
 void gpu_panic(char *msg)

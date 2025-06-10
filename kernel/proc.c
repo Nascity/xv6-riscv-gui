@@ -56,7 +56,10 @@ procinit(void)
   for(p = proc; p < &proc[NPROC]; p++) {
       initlock(&p->lock, "proc");
       initlock(&p->read_lock, "proc_r");
+      initlock(&p->read_lock2, "proc_r2");
       initlock(&p->write_lock, "proc_w");
+      initlock(&p->write_lock2, "proc_w2");
+
       p->state = UNUSED;
       p->kstack = KSTACK((int) (p - proc));
   }
@@ -179,6 +182,7 @@ freeproc(struct proc *p)
   p->msg_queue = 0;
   p->readptr = 0;
   p->writeptr = 0;
+  p->justread = 0;
 }
 
 // Create a user page table for a given process, with no user memory,

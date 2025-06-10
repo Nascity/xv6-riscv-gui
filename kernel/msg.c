@@ -35,6 +35,7 @@ int send_msg(struct proc *p, char *kernel_buf, int size, int isalloced)
 {
 	// acquire write lock
 	acquire(&p->write_lock);
+	acquire(&p->write_lock2);
 	
 	// wait for the buffer to be empty
 	write_wait(p);
@@ -53,10 +54,12 @@ int send_msg(struct proc *p, char *kernel_buf, int size, int isalloced)
 
 	// increment writeptr
 	p->writeptr = (p->writeptr + 1) % Q_SZ;
+	p->justread = 0;
 
 	if (isalloced)
 		kfree(kernel_buf);
 	release(&p->lock);
+	release(&p->write_lock2);
 	release(&p->write_lock);
 	return MSG_Q_OK;
 }
@@ -65,8 +68,10 @@ int send_msg(struct proc *p, char *kernel_buf, int size, int isalloced)
 struct msg *recv_msg(struct proc *p, char *kernel_buf, int size, int timeout)
 {
 	acquire(&p->read_lock);
+	acquire(&p->read_lock2);
 	if (!read_wait(p, timeout))
 	{
+		release(&p->read_lock2);
 		release(&p->read_lock);
 		return (struct msg*)MSG_Q_TIMEOUT;
 	}
@@ -75,10 +80,12 @@ struct msg *recv_msg(struct proc *p, char *kernel_buf, int size, int timeout)
 
 	// increment readptr
 	p->readptr = (p->readptr + 1) % Q_SZ;
+	p->justread = 1;
 
 	// kinda feel dangerous to release here...
 	// hope nothing bad happens
 	release(&p->lock);
+	release(&p->read_lock2);
 	release(&p->read_lock);
 	return pm;
 }
@@ -96,16 +103,28 @@ int read_wait(struct proc *p, int timeout)
 		__sync_synchronize();
 		if (ticks - start >= timeout * TPS)
 			return 0;
+		__sync_synchronize();
 	}
 	__sync_synchronize();
 	acquire(&p->lock);
+	__sync_synchronize();
 
 	return 1;
 }
 
 void write_wait(struct proc *p)
 {
-	while (p->readptr == (p->writeptr + 1 % Q_SZ));
+	while (1)
+	{
+		if (p->readptr == (p->writeptr + 1 % Q_SZ))
+		{
+			if (!p->justread)
+				break;
+		}
+		else
+			break;
+	}
 	__sync_synchronize();
 	acquire(&p->lock);
+	__sync_synchronize();
 }

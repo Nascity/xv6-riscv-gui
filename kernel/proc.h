@@ -109,7 +109,8 @@ struct proc {
   uint64 msg_queue;
   int readptr;
   int writeptr;
+  int justread;
 
   // locks for rw
-  struct spinlock read_lock, write_lock;
+  struct spinlock read_lock, write_lock, read_lock2, write_lock2;
 };

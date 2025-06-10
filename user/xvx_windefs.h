@@ -4,6 +4,8 @@
 #define MONITOR_WIDTH	1280
 #define MONITOR_HEIGHT	800
 
+#define SAFE_MARGIN	10
+
 #define RGB(r, g, b)	((((r) & 0xFF) << 16) + (((g) & 0xFF) << 8) + ((b) & 0xFF))
 #define GRAY(g)		(RGB((g), (g), (g)))
 

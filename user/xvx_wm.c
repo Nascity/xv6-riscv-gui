@@ -240,7 +240,6 @@ int main(int argc, char *argv[])
 		exit_wm(-1);
 	}
 
-
 	while (1)
 	{
 		struct wmmsg msg;
@@ -254,20 +253,9 @@ int main(int argc, char *argv[])
 			update_cursor(X(msg.param0), Y(msg.param0));
 			break;
 		case EV_KEY:
+			render();
 			click_cursor(X(msg.param0), Y(msg.param0), msg.param1);
 			break;
-		}
-
-		int pid = fork();
-
-		if (pid == 0)
-		{
-			render();
-		}
-		else if (pid < 0)
-		{
-			printf("Critical error!\n");
-			exit_wm(pid);
 		}
 	}
 }
@@ -303,7 +291,6 @@ void draw_cursor(int x, int y, int color)
 	int i, j;
 	int cursor_buffer[CURSOR_WIDTH * CURSOR_HEIGHT];
 
-	invalidate_region(last_pos_x, last_pos_y, CURSOR_WIDTH, CURSOR_HEIGHT);
 	for (i = 0; i < CURSOR_HEIGHT; i++)
 		for (j = 0; j < CURSOR_WIDTH; j++)
 		{
@@ -322,6 +309,9 @@ void draw_cursor(int x, int y, int color)
 			cursor_buffer[i * CURSOR_WIDTH + j] = col;
 		}
 
+	if (x < SAFE_MARGIN || x + CURSOR_WIDTH > MONITOR_WIDTH - SAFE_MARGIN
+		|| y < SAFE_MARGIN || y + CURSOR_HEIGHT > MONITOR_HEIGHT - SAFE_MARGIN)
+		return;
 	draw_bits(x, y, CURSOR_WIDTH, CURSOR_HEIGHT, (uint32*)cursor_buffer, CURSOR_WIDTH * CURSOR_HEIGHT);
 
 	last_pos_x = x;
@@ -343,8 +333,10 @@ void click_cursor(int x, int y, int pressed)
 
 void invalidate_region(int x, int y, int width, int height)
 {
-	int *buf;
+	unsigned int *buf;
 	int i, j;
+
+	printf("%d %d %d %d\n", x, y, width, height);
 
 	if (x < 0)
 	{
@@ -356,30 +348,19 @@ void invalidate_region(int x, int y, int width, int height)
 		height += y;
 		y = 0;
 	}
+	if (x + width > MONITOR_WIDTH)
+		width -= x + width - MONITOR_WIDTH;
+	if (y + height > MONITOR_HEIGHT)
+		height -= y + height - MONITOR_HEIGHT;
 
-	if (width * height <= 4096)
-	{
-		buf = malloc(width * height * sizeof(int));
-		for (i = 0; i < height; i++)
-			for (j = 0; j < width; j++)
-				buf[i * width + j] = screen_buffer[i + y][j + x];
-		draw_bits(x, y, width, height, (uint32*)buf, width * height);
-		free(buf);
-	}
-	else
-	{
-		int grid_x, grid_y;
+	buf = malloc(sizeof(int) * width * height);
 
-		grid_x = width % 32 == 0 ? width / 32 : width / 32 + 1;
-		grid_y = height % 32 == 0 ? height / 32 : height / 32 + 1;
+	for (i = 0; i < height; i++)
+		for (j = 0; j < width; j++)
+			buf[i * width + j] = screen_buffer[i][j];
+	draw_bits(x, y, width, height, buf, width * height);
 
-		for (i = 0; i < grid_y; i++)
-			for (j = 0; j < grid_x; j++)
-			{
-				invalidate_region(x + j * 32, y + i * 32, 32, 32);
-			}
-	}
-
+	free(buf);
 }
 
 // receives kernel message and returns it via pointer

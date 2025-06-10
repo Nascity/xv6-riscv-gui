@@ -112,13 +112,14 @@ sys_draw_fill(void)
 	return 0;
 }
 
+uint32 drawbits_buffer[800 * 1280];
+
 uint64
 sys_draw_bits(void)
 {
 	int x, y, w, h;
 	uint64 bits;
 	int size;
-	int drawn = 0;
 
 	argint(0, &x);
 	argint(1, &y);
@@ -130,20 +131,10 @@ sys_draw_bits(void)
 	if (x < 0 || y < 0 || w < 0 || h < 0)
 		return -1;
 
-	void *kernel_bits = kalloc();
+	if (copyin(myproc()->pagetable, (char*)drawbits_buffer, bits, sizeof(uint32) * size))
+		panic("drawbits - copyin failed");
+	draw_bits(x, y, w, h, (uint32*)drawbits_buffer, size);
 
-	while (size - drawn > PGSIZE)
-	{
-		if (copyin(myproc()->pagetable, kernel_bits, bits + drawn, PGSIZE))
-			panic("draw_bits - copyin failed");
-		draw_bits(x, y, w, h, (uint32*)kernel_bits, PGSIZE);
-		drawn += PGSIZE;
-	}
-	if (copyin(myproc()->pagetable, kernel_bits, bits + drawn, (size - drawn) * sizeof(uint32)))
-		panic("draw_bits - copyin failed");
-	draw_bits(x, y, w, h, (uint32*)kernel_bits, (size - drawn) * sizeof(uint32));
-
-	kfree(kernel_bits);
 	return 0;
 }
 
