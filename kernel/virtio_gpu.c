@@ -40,6 +40,7 @@ static struct gpu
 
 	// lock for gpu operations
 	struct spinlock gpu_lock;
+	struct spinlock flush_lock;
 
 	// the dimension of the screen
 	uint32 width;
@@ -63,6 +64,7 @@ virtio_gpu_init(void)
 	uint32 vendor = *R(VIRTIO_MMIO_VENDOR_ID);
 
 	initlock(&gpu.gpu_lock, "gpu");
+	initlock(&gpu.flush_lock, "flush");
 
 	if (magic != 0x74726976 || vendor != 0x554d4551 || device != 16)
 	{
@@ -305,8 +307,10 @@ void virtio_gpu_check_or_die(char *funcname, struct virtio_gpu_ctrl_hdr *resp, u
 
 void virtio_gpu_apply(void)
 {
+	acquire(&gpu.flush_lock);
 	virtio_gpu_transfer();
 	virtio_gpu_flush();
+	release(&gpu.flush_lock);
 }
 
 void write_ready_screen(void)
@@ -333,7 +337,6 @@ void draw_fill(uint16 x, uint16 y, uint16 width, uint16 height, uint32 color)
 	for (int i = 0; i < height && y + i < gpu.height; i++)
 		for (int j = 0; j < width && x + j < gpu.width; j++)
 			*get_pixel_addr(x, y, i, j) = color;
-
 	virtio_gpu_apply();
 }
 
@@ -348,7 +351,6 @@ void draw_bits(uint16 x, uint16 y, uint16 width, uint16 height, uint32 *bits, in
 		for (int j = 0; j < width && x + j < gpu.width; j++)
 			if (i * width + j <= size)
 				*get_pixel_addr(x, y, i, j) = bits[i * width + j];
-
 	virtio_gpu_apply();
 }
 

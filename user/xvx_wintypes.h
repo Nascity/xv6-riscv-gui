@@ -47,7 +47,25 @@ struct win
 
 	int maximized;
 	int minimized;
-	int rendered;
+};
+
+struct z
+{
+	unsigned long long level;
+	struct win *win;
+	struct z *higher;
+	struct z *lower;
+};
+
+struct z_list
+{
+	struct z *bottom, *top;
+};
+
+struct rect
+{
+#define INVALID_RECT	(-2147483648)
+	int top, bottom, left, right;
 };
 
 #endif

@@ -4,11 +4,13 @@
 #include "xvx_wintypes.h"
 #include "xvx_wincomp.h"
 
-#define MAX_WINDOWS 512
-struct win windows[MAX_WINDOWS];
-
+struct z_list zl;
 winident_t id_track;
 int shell_index;
+
+// Z operation
+void add_to_top(struct win *pw);
+void move_to_top(struct win *pw);
 
 // msg operations
 #define TIMEOUT		10
@@ -19,10 +21,10 @@ void send_msg_to_proc(int pid, int code, int param0, int param1);
 void init_wm(void);
 void exit_wm(int);
 
-int register_window(const char *title, int owner, int x, int y, int width, int height, winident_t parent, int draw_type);
+int register_window(const char *title, int owner, int x, int y, int width, int height, struct win *parent, int draw_type);
 
 // draw operation
-void draw_rect(int x, int y, int width, int height, int rgb);
+void rect(int x, int y, int width, int height, int rgb);
 
 void draw_cursor(int x, int y, int color);
 void update_cursor(int x, int y);
@@ -52,7 +54,16 @@ int last_pos_x;
 int last_pos_y;
 
 // text
-char *charmap[] = {
+#define ALPHABET_BASE_WIDTH		5
+#define ALPHABET_BASE_HEIGHT		5
+#define GET_ALPHA_FROM_LOWER(ch)	((char*)&alphabet[((ch) - 'a') * ALPHA_BASE_HEIGHT])
+#define GET_ALPHA_FROM_UPPER(ch)	((char*)&alphabet[((ch) - 'A') * ALPHA_BASE_HEIGHT])
+#define GET_ALPHA(ch)			(((ch) >= 'A') && (ch) <= 'Z'	?	\
+					GET_ALPHA_FROM_UPPER(ch)	:	\
+					((ch) >= 'a' && (ch) <= 'z'	?	\
+					GET_ALPHA_FROM_LOWER(ch)	:	\
+					(char*)0))
+char *alphabet[] = {
     " ooo ",
     "o   o",
     "ooooo",
@@ -229,6 +240,7 @@ int main(int argc, char *argv[])
 		exit_wm(-1);
 	}
 
+
 	while (1)
 	{
 		struct wmmsg msg;
@@ -246,7 +258,17 @@ int main(int argc, char *argv[])
 			break;
 		}
 
-		render();
+		int pid = fork();
+
+		if (pid == 0)
+		{
+			render();
+		}
+		else if (pid < 0)
+		{
+			printf("Critical error!\n");
+			exit_wm(pid);
+		}
 	}
 }
 
@@ -254,12 +276,10 @@ void init_wm(void)
 {
 	int i, j;
 
-	for (i = 0; i < MAX_WINDOWS; i++)
-		windows[i].id = NO_WINIDENT;
 	for (i = 0; i < MONITOR_HEIGHT; i++)
 		for (j = 0; j < MONITOR_WIDTH; j++)
 			screen_buffer[i][j] = BACKGROUND_COLOR;
-	draw_fill(0, 0, MONITOR_WIDTH, MONITOR_HEIGHT, BACKGROUND_COLOR);
+	rect(0, 0, MONITOR_WIDTH, MONITOR_HEIGHT, BACKGROUND_COLOR);
 }
 
 void exit_wm(int exit_code)
@@ -268,7 +288,7 @@ void exit_wm(int exit_code)
 	exit(exit_code);
 }
 
-void draw_rect(int x, int y, int width, int height, int rgb)
+void rect(int x, int y, int width, int height, int rgb)
 {
 	int i, j;
 
@@ -388,17 +408,11 @@ void send_msg_to_proc(int pid, int code, int param0, int param1)
 // registers a new window in windows array
 // returns the index of the array when success
 // returns -1 when failed
-int register_window(const char *title, int owner, int x, int y, int width, int height, winident_t parent, int draw_type)
+int register_window(const char *title, int owner, int x, int y, int width, int height, struct win *parent, int draw_type)
 {
-	int i;
 	struct win *ptr;
 
-	for (i = 0; i < MAX_WINDOWS; i++)
-		if (windows[i].id == NO_WINIDENT)
-			break;
-	if (i == MAX_WINDOWS)
-		return -1;
-	ptr = &windows[i];
+	ptr = malloc(sizeof(struct win));
 
 	ptr->id = id_track++;
 	ptr->owner = owner;
@@ -406,115 +420,193 @@ int register_window(const char *title, int owner, int x, int y, int width, int h
 	ptr->y = y;
 	ptr->width = width;
 	ptr->height = height;
-	ptr->parent = &windows[parent];
+	ptr->parent = parent;
 	ptr->num_children = 0;
 	ptr->win_draw_type = draw_type;
 	ptr->maximized = 0;
-	ptr->rendered = 0;
+	ptr->minimized = 0;
 	strcpy(ptr->title, title);
 
-	return i;
+	add_to_top(ptr);
+
+	return ptr->id;
 }
 
-void render_top_bar(int x, int y, int width, int draw_type)
+void add_to_top(struct win *pw)
 {
+	struct z *newz = malloc(sizeof(struct z));
+
+	newz->higher = 0;
+	newz->lower = zl.top;
+	newz->win = pw;
+	if (!zl.top && !zl.bottom)
+	{
+		newz->level = 0;
+		zl.bottom = zl.top = newz;
+	}
+	else
+	{
+		newz->level = zl.top->level + 1;
+		zl.top = newz;
+	}
+}
+
+void move_to_top(struct win *pw)
+{
+	struct z *movz;
+
+	for (movz = zl.bottom; movz; movz = movz->higher)
+		if (movz->win == pw)
+			break;
+	if (!movz)
+		return;
+
+	if (movz == zl.bottom)
+		zl.bottom = zl.bottom->higher;
+
+	movz->lower->higher = movz->higher;
+	movz->higher->lower = movz->lower;
+
+	zl.top->higher = movz;
+	movz->lower = zl.top;
+	movz->level = zl.top->level + 1;
+
+	zl.top = movz;
+}
+
+void update_invalid_rect(struct win *pw, struct rect *rct)
+{
+	if (pw->maximized)
+	{
+		rct->left = rct-> top = 0;
+		rct->right = MONITOR_WIDTH;
+		rct->bottom = MONITOR_HEIGHT;
+	}
+	if (rct->left == rct->right && rct->right == rct->top
+		&& rct->top == rct-> bottom && rct->bottom == INVALID_RECT)
+	{
+		rct->left = pw->x;
+		rct->right = pw->x + pw->width;
+		rct->top = pw->y;
+		rct->bottom = pw->y + pw->height;
+		return;
+	}
+	
+	if (pw->x < rct->left)
+		rct->left = pw->x;
+	if (pw->x + pw->width > rct->right)
+		rct->right = pw->x + pw->width;
+	if (pw->y < rct->top)
+		rct->top = pw->y;
+	if (pw->y + pw->height > rct->bottom)
+		rct->bottom = pw->y + pw->height;
+}
+
+void clear_screen_buffer(void)
+{
+	int i, j;
+
+	for (i = 0; i < MONITOR_HEIGHT; i++)
+		for (j = 0; j < MONITOR_WIDTH; j++)
+			screen_buffer[i][j] = RGB(0, 255, 0);
+}
+
+void render_top_bar(struct win *pw)
+{
+	int x, y, width, draw_type;
+
+	if (pw->maximized)
+	{
+		x = y = 0;
+		width = MONITOR_WIDTH;
+	}
+	else
+	{
+		x = pw->x;
+		y = pw->y;
+		width = pw->width;
+	}
+	draw_type = pw->win_draw_type;
+
 	// bar
-	draw_rect(x, y, width, TOP_BAR_HEIGHT, THEME_COLOR);
+	rect(x, y, width, TOP_BAR_HEIGHT, THEME_COLOR);
 	// exit
-	draw_rect(x + width - TOP_BAR_BUTTON_SIZE + TOP_BAR_BUTTON_MARGIN,
+	rect(x + width - TOP_BAR_BUTTON_SIZE + TOP_BAR_BUTTON_MARGIN,
 			y + TOP_BAR_BUTTON_MARGIN,
 			TOP_BAR_BUTTON_SIZE - TOP_BAR_BUTTON_MARGIN * 2,
 			TOP_BAR_BUTTON_SIZE - TOP_BAR_BUTTON_MARGIN * 2,
 			EXIT_BUTTON_COLOR);
 	// maximize
 	if (draw_type & MAXIMIZE_BUTTON)
-		draw_rect(x + width - 2 * TOP_BAR_BUTTON_SIZE + TOP_BAR_BUTTON_MARGIN,
+		rect(x + width - 2 * TOP_BAR_BUTTON_SIZE + TOP_BAR_BUTTON_MARGIN,
 				y + TOP_BAR_BUTTON_MARGIN,
 				TOP_BAR_BUTTON_SIZE - TOP_BAR_BUTTON_MARGIN * 2,
 				TOP_BAR_BUTTON_SIZE - TOP_BAR_BUTTON_MARGIN * 2,
 				MAX_BUTTON_COLOR);
 	// minimize
 	if (draw_type & MINIMIZE_BUTTON)
-		draw_rect(x + width - 3 * TOP_BAR_BUTTON_SIZE + TOP_BAR_BUTTON_MARGIN,
+		rect(x + width - 3 * TOP_BAR_BUTTON_SIZE + TOP_BAR_BUTTON_MARGIN,
 				y + TOP_BAR_BUTTON_MARGIN,
 				TOP_BAR_BUTTON_SIZE - TOP_BAR_BUTTON_MARGIN * 2,
 				TOP_BAR_BUTTON_SIZE - TOP_BAR_BUTTON_MARGIN * 2,
 				MIN_BUTTON_COLOR);
 }
 
+void render_window(struct win *pw)
+{
+	int x, y, width, height;
+
+	if (pw->maximized)
+	{
+		x = y = 0;
+		width = MONITOR_WIDTH;
+		height = MONITOR_HEIGHT;
+	}
+	else
+	{
+		x = pw->x;
+		y = pw->y;
+		width = pw->width;
+		height = pw->height;
+	}
+
+	if (pw->win_draw_type & BORDER)
+	{
+		rect(x, y, width, height, WINDOW_BORDER_COLOR);
+		rect(x + BORDER_THICKNESS, y + BORDER_THICKNESS,
+			width - 2 * BORDER_THICKNESS,
+			height - 2 * BORDER_THICKNESS,
+			WINDOW_BACKGROUND_COLOR);
+	}
+	else
+		rect(x, y, width, height, WINDOW_BACKGROUND_COLOR);
+
+	if (!(pw->win_draw_type & NO_TOP_BAR))
+		render_top_bar(pw);
+}
+
 void render_components(struct win *pw)
 {
-	struct wincomponent *pwc;
 
-	for (pwc = pw->first; pwc; pwc = pwc->next)
-	{
-		switch (pwc->comp_type)
-		{
-		case FILL:
-			int color = ((struct fill_component)pwc->comp)->color;
-			draw_fill(pw->x + pwc->x, pw->y + pwc->y, pwc->width, pwc->height, color);
-			break;
-		case BUTTON:
-
-			break;
-		case ICON:
-
-			break;
-		case TEXT:
-
-			break;
-		default:
-			break;
-		}
-	}
 }
 
 void render(void)
 {
-	int i;
-	struct win *pw;
-	int x, y, width, height;
+	struct z *pz;
+	struct rect inv;
 
-	for (i = 0; i < MAX_WINDOWS; i++)
+	inv.left = inv.right = inv.top = inv.bottom = INVALID_RECT;
+	clear_screen_buffer();
+
+	for (pz = zl.bottom; pz; pz = pz->higher)
 	{
-		pw = &windows[i];
-		if (pw->id == NO_WINIDENT || pw->rendered || pw->minimized)
+		update_invalid_rect(pz->win, &inv);
+
+		if (pz->win->minimized)
 			continue;
-
-		// window minized
-		if (pw->maximized)
-		{
-			x = 0;
-			y = 0;
-			width = MONITOR_WIDTH;
-			height = MONITOR_WIDTH;
-		}
-		else
-		{
-			x = pw->x;
-			y = pw->y;
-			width = pw->width;
-			height = pw->height;
-		}
-
-		// window background and border
-		if (pw->win_draw_type & BORDER)
-		{
-			draw_rect(x, y, width, height, WINDOW_BORDER_COLOR);
-			draw_rect(x + BORDER_THICKNESS, y + BORDER_THICKNESS,
-				width - 2 * BORDER_THICKNESS, height - 2 * BORDER_THICKNESS,
-				WINDOW_BACKGROUND_COLOR);
-		}
-		else
-			draw_rect(x, y, width, height, WINDOW_BACKGROUND_COLOR);
-
-		// make top bar
-		if (!(pw->win_draw_type & NO_TOP_BAR))
-			render_top_bar(x, y, width, pw->win_draw_type);
-
-		render_components(pw);
-
-		invalidate_region(x, y, width, height);
-		pw->rendered = 1;
+		render_window(pz->win);
+		render_components(pz->win);
 	}
+
+	invalidate_region(inv.left, inv.top, inv.right - inv.left, inv.bottom - inv.top);
 }
