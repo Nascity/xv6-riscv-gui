@@ -262,3 +262,14 @@ Anyways, I decided not to modify `mkfs.c` - putting the files in the `user/` dir
 ![image](https://github.com/user-attachments/assets/cf6e6e1c-8890-43bb-b973-e258d5641a18)
 
 Now we can render windows.
+
+# 8th day of dev (Jun 15, approx. 5h lost while making text appear)
+![image](https://github.com/user-attachments/assets/cf744828-0eee-433e-83b6-9c582553afb8)
+
+I've done it.
+
+Finally I made the text appear on the screen.
+
+I have to go through errors that have been accumulated from all these times of programming.
+
+Anyways, we see letters, now!
