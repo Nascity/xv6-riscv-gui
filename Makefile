@@ -147,7 +147,8 @@ UPROGS=\
 	$U/_xvx_wm
 
 fs.img: mkfs/mkfs README $(UPROGS)
-	mkfs/mkfs fs.img README $(UPROGS)
+	mkfs/mkfs fs.img README dir.bmp		\
+		exe.bmp img.bmp $(UPROGS)
 
 -include kernel/*.d user/*.d
 

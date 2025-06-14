@@ -1,6 +1,7 @@
 #include "kernel/types.h"
 #include "kernel/input_events.h"
 #include "kernel/fs.h"
+#include "kernel/stat.h"
 #include "user/user.h"
 #include "xvx_wintypes.h"
 #include "xvx_wincomp.h"
@@ -8,7 +9,8 @@
 struct z_list zl;
 winident_t id_track;
 wincomp_t comp_id_track;
-int shell_index;
+struct win *shell;
+struct win *welcome;
 
 // Z operation
 void add_to_top(struct win *pw);
@@ -21,17 +23,15 @@ void send_msg_to_proc(int pid, int code, int param0, int param1);
 
 // window operations
 void init_wm(void);
+void init_welcome(void);
 void exit_wm(int);
 
-int register_window(const char *title, int owner, int x, int y, int width, int height, struct win *parent, int draw_type);
-
-void add_to_top(struct win *pw);
-void move_to_top(struct win *pw);
+struct win *register_window(const char *title, int owner, int x, int y, int width, int height, struct win *parent, int draw_type);
 
 // component operations
 void *make_fill_comp(int color);
 void *make_button_comp(char *text, int len);
-void *make_icon_comp(void *bitmap, char *text, int len);
+void *make_icon_comp(int type, char *text, int len);
 void *make_text_comp(char *text, int len, int pt, int color);
 void add_components(struct win *pw, int comptype, int rel_x, int rel_y, int width, int height, void *info);
 
@@ -64,6 +64,21 @@ char *cursor[] = {
 	"ooooo",
 	" o   ",
 	" o   ",
+};
+
+// icon & bitmap
+#define ICON_WIDTH	50
+#define ICON_HEIGHT	40
+#define BMP_HEADER_SIZE	138
+void load_bitmaps(void);
+void bits_from_2d(int x, int y, int width, int height, int (*bitmap)[]);
+
+int icons[ICON_COUNT][ICON_HEIGHT][ICON_WIDTH];
+const char *paths[ICON_COUNT] = {
+	"/exe.bmp",
+	"/img.bmp",
+	"/dir.bmp",
+	0
 };
 
 // text
@@ -241,17 +256,24 @@ char *alphabet[26][5] = {
 int main(int argc, char *argv[])
 {
 	register_wm();
+	load_bitmaps();
 
-	shell_index = register_window("XvX shell", 0, 0, 0, MONITOR_WIDTH, MONITOR_HEIGHT, 0, NO_TOP_BAR);
-	// register_window("Test window", 0, 390, 250, 500, 300, 0, DEFAULT_WINDOW);
+	shell = register_window("XvX shell", 0,
+			0, 0, MONITOR_WIDTH, MONITOR_HEIGHT,
+			0, NO_TOP_BAR);
+	welcome = register_window("WELCOME", 0,
+			WELCOME_WINDOW_X, WELCOME_WINDOW_Y,
+			WELCOME_WINDOW_WIDTH, WELCOME_WINDOW_HEIGHT,
+			0, DEFAULT_WINDOW);
 	
-	if (shell_index == -1)
+	if (!shell)
 	{
 		printf("Cannot register shell window.\n");
 		exit_wm(-1);
 	}
 
 	init_wm();
+	init_welcome();
 
 	while (1)
 	{
@@ -273,6 +295,43 @@ int main(int argc, char *argv[])
 	}
 }
 
+void load_bitmaps(void)
+{
+	int i, x, y;
+	char buffer[BMP_HEADER_SIZE];
+	char color_buf[3];
+
+	for (i = 0; i < ICON_COUNT; i++)
+	{
+		if (!paths[i])
+			continue;
+
+		int fd = open(paths[i], 0);
+
+		if (fd < 0)
+		{
+			printf("Failed to open %d-th bmp.\n", i);
+			exit_wm(-1);
+		}
+
+		read(fd, buffer, BMP_HEADER_SIZE);
+
+		for (y = 0; y < ICON_HEIGHT; y++)
+		{
+			for (x = 0; x < ICON_WIDTH; x++)
+			{
+				read(fd, color_buf, 3);
+				icons[i][y][x] = RGB(color_buf[2],
+						color_buf[1],
+						color_buf[0]);
+			}
+			read(fd, buffer, 2);
+		}
+
+		close(fd);
+	}
+}
+
 void init_wm(void)
 {
 	int i, j;
@@ -288,16 +347,77 @@ void init_wm(void)
 	i = j = 0;
 	while (read(fd, &de, sizeof(de)) == sizeof(de))
 	{
-		if (de.inum == 0)
+		if (de.inum == 0 || de.name[0] == '.')
 			continue;
-		add_components(zl.bottom->win, ICON,
-				j * DESKTOP_ICON_WIDTH,
-				i * DESKTOP_ICON_HEIGHT,
+
+		struct stat st;
+		int type = ICON_ETC;
+
+		stat(de.name, &st);
+		switch (st.type)
+		{
+		case T_FILE:
+			type = ICON_EXE;
+			break;
+		case T_DIR:
+			type = ICON_DIR;
+			break;
+		}
+		for (int i = 0, len = strlen(de.name); i < 3; i++)
+			if (de.name[len - 3 + i] != "bmp"[i])
+				break;
+		if (i == 3)
+			type = ICON_BMP;
+
+		add_components(shell, ICON,
+				j * (DESKTOP_ICON_WIDTH + DESKTOP_ICON_MARGIN) + DESKTOP_ICON_MARGIN,
+				i * (DESKTOP_ICON_HEIGHT + DESKTOP_ICON_MARGIN) + DESKTOP_ICON_MARGIN,
 				DESKTOP_ICON_WIDTH,
 				DESKTOP_ICON_HEIGHT,
-				make_icon_comp(0, de.name, strlen(de.name))
+				make_icon_comp(type, de.name, strlen(de.name))
 			      );
+
+		i++;
+		if (i >= (MONITOR_HEIGHT - DESKTOP_ICON_MARGIN * i) / DESKTOP_ICON_HEIGHT)
+		{
+			i = 0;
+			j++;
+		}
 	}
+
+	add_components(shell, FILL, 0, 0,
+			MONITOR_WIDTH, MONITOR_HEIGHT,
+			make_fill_comp(BACKGROUND_COLOR));
+}
+
+void init_welcome(void)
+{
+	int actual_height = welcome->height - TOP_BAR_HEIGHT;
+	char *welcome_msg = "Welcome to XvX";
+
+	struct text_component *test;
+
+	add_components(welcome, TEXT,
+			(welcome->width - get_text_width(WELCOME_MSG_SIZE, welcome_msg)) / 2,
+			(actual_height - WELCOME_MSG_SIZE) / 2 - 50, 0, 0,
+			make_text_comp(welcome_msg, strlen(welcome_msg),
+				WELCOME_MSG_SIZE, 0));
+	add_components(welcome, BUTTON,
+			(welcome->width - WELCOME_BUTTON_WIDTH) / 2,
+			(welcome->height - WELCOME_BUTTON_HEIGHT) / 2 + 50,
+			WELCOME_BUTTON_WIDTH,
+			WELCOME_BUTTON_HEIGHT,
+			test = make_button_comp("OK", 3));
+
+	/*
+	add_components(welcome, TEXT,
+			(welcome->width - get_text_width(WELCOME_MSG_SIZE, welcome_msg)) / 2,
+			(actual_height - WELCOME_MSG_SIZE) / 2,
+			get_text_width(WELCOME_MSG_SIZE, welcome_msg),
+			WELCOME_MSG_SIZE,
+			make_text_comp(welcome_msg, strlen(welcome_msg),
+				WELCOME_MSG_SIZE, 0));
+				*/
 }
 
 void exit_wm(int exit_code)
@@ -350,7 +470,7 @@ void chr(int x, int y, int pt, char ch, int color)
 void text(int x, int y, int pt, char *text, int color)
 {
 	int j, count;
-	
+
 	if (pt < 5)
 		pt = 5;
 	for (j = x, count = 0;
@@ -367,6 +487,20 @@ int get_text_width(int pt, char *text)
 	return j;
 }
 
+void bits_from_2d(int x, int y, int width, int height, int (*bitmap)[ICON_HEIGHT])
+{
+	int i, j;
+
+	for (i = y; i < y + height && i < MONITOR_HEIGHT; i++)
+	{
+		for (j = x; j < x + width && j < MONITOR_WIDTH; j++)
+		{
+			if (i > 0 && j > 0)
+				screen_buffer[i][j] = bitmap[i - y][j - x];
+		}
+	}
+}
+
 void draw_cursor(int x, int y, int color)
 {
 	int i, j;
@@ -379,7 +513,7 @@ void draw_cursor(int x, int y, int color)
 			unsigned int col;
 			char val = cursor[i / CURSOR_RESIZE][j / CURSOR_RESIZE];
 
-			if (val == ' ')
+			if (val == ' ' && y + i < MONITOR_HEIGHT && x + j < MONITOR_WIDTH)
 				col = screen_buffer[y + i][x + j];
 			else if (val == 'o')
 				col = color;
@@ -446,10 +580,7 @@ void invalidate_region(int x, int y, int width, int height)
 int recv_kernel_msg(struct wmmsg* pmsg)
 {
 	if (recv_msg(pmsg, sizeof(struct wmmsg), TIMEOUT) == -1)
-	{
-		printf("DEBUG: timeout\n");
 		return -1;
-	}
 	return 0;
 }
 
@@ -467,7 +598,7 @@ void send_msg_to_proc(int pid, int code, int param0, int param1)
 // registers a new window in windows array
 // returns the index of the array when success
 // returns -1 when failed
-int register_window(const char *title, int owner, int x, int y, int width, int height, struct win *parent, int draw_type)
+struct win *register_window(const char *title, int owner, int x, int y, int width, int height, struct win *parent, int draw_type)
 {
 	struct win *ptr;
 
@@ -489,7 +620,7 @@ int register_window(const char *title, int owner, int x, int y, int width, int h
 
 	add_to_top(ptr);
 
-	return ptr->id;
+	return ptr;
 }
 
 void *make_fill_comp(int color)
@@ -506,22 +637,23 @@ void *make_button_comp(char *text, int len)
 	struct button_component *pbc = malloc(sizeof(struct button_component) + len);
 	int i;
 
-	pbc->length = len;
-	for (i = 0; i < len; i++)
+	for (i = 0; i < len && text[i]; i++)
 		pbc->text[i] = text[i];
+	pbc->text[i] = 0;
 
 	return (void*)pbc;
 }
 
-void *make_icon_comp(void *bitmap, char *text, int len)
+void *make_icon_comp(int type, char *text, int len)
 {
 	struct icon_component *pic = malloc(sizeof(struct icon_component) + len);
 	int i;
 
-	pic->length = len;
-	pic->bitmap = bitmap;
-	for (i = 0; i < len; i++)
+	pic->type = type;
+	pic->bitmap = icons[type];
+	for (i = 0; i < len && text[i]; i++)
 		pic->text[i] = text[i];
+	pic->text[i] = 0;
 
 	return (void*)pic;
 }
@@ -531,11 +663,11 @@ void *make_text_comp(char *text, int len, int pt, int color)
 	struct text_component *ptc = malloc(sizeof(struct text_component) + len);
 	int i;
 
-	ptc->length = len;
 	ptc->pt = pt;
 	ptc->color = color;
-	for (i = 0; i < len; i++)
+	for (i = 0; i < len && text[i]; i++)
 		ptc->text[i] = text[i];
+	ptc->text[i] = 0;
 
 	return (void*)ptc;
 }
@@ -572,6 +704,7 @@ void add_to_top(struct win *pw)
 	else
 	{
 		newz->level = zl.top->level + 1;
+		zl.top->higher = newz;
 		zl.top = newz;
 	}
 }
@@ -586,8 +719,7 @@ void move_to_top(struct win *pw)
 	if (!movz)
 		return;
 
-	if (movz == zl.bottom)
-		zl.bottom = zl.bottom->higher;
+	if (movz == zl.bottom) zl.bottom = zl.bottom->higher;
 
 	movz->lower->higher = movz->higher;
 	movz->higher->lower = movz->lower;
@@ -667,6 +799,7 @@ void render_window(struct win *pw)
 		height = pw->height;
 	}
 
+	rect(x + WINDOW_SHADOW_OFFSET, y + WINDOW_SHADOW_OFFSET, width, height, WINDOW_SHADOW_COLOR);
 	if (pw->win_draw_type & BORDER)
 	{
 		rect(x, y, width, height, WINDOW_BORDER_COLOR);
@@ -687,28 +820,62 @@ void render_components(struct win *pw)
 	int base_x, base_y;
 
 	base_x = pw->x;
-	base_y = pw->y + TOP_BAR_HEIGHT;
+	base_y = pw->y;
+
+	if (!(pw->win_draw_type & NO_TOP_BAR))
+		base_y += TOP_BAR_HEIGHT;
 	if (pw->win_draw_type & BORDER)
 		base_x += BORDER_THICKNESS;
 
 	for (struct wincomponent *ptr = pw->first; ptr; ptr = ptr->next)
 	{
+		int x, y;
+		int pt, pt2;
+
+		x = base_x + ptr->x;
+		y = base_y + ptr->y;
+
 		switch (ptr->comp_type)
 		{
 		case FILL:
-			rect(base_x + ptr->x, base_y + ptr->y,
-				ptr->width, ptr->height,
+			rect(x, y, ptr->width, ptr->height,
 				((struct fill_component*)ptr->comp)->color);
 			break;
 		case BUTTON:
-			
+			pt = ptr->height - 2 * COMP_BUTTON_TEXT_MARGIN;
+			pt2 = ptr->width - 2 * COMP_BUTTON_TEXT_MARGIN;
+			if (pt2 < pt && pt2 >= 5)
+				pt = pt2;
+			rect(x, y, ptr->width, ptr->height, GRAY(0));
+			rect(x + COMP_BUTTON_MARGIN, y + COMP_BUTTON_MARGIN,
+				ptr->width - 2 * COMP_BUTTON_MARGIN,
+				ptr->height - 2 * COMP_BUTTON_MARGIN,
+				COMP_BUTTON_COLOR);
+
+			text(x + (ptr->width
+					- get_text_width(pt,
+					((struct text_component*)ptr->comp)->text)
+					) / 2,
+				y + (ptr->height - pt) / 2,
+				pt,
+				((struct text_component*)ptr->comp)->text,
+				COMP_BUTTON_OUTLINE_COLOR);
 			break;
 		case ICON:
-
+			pt = ICON_TEXT_SIZE;
+			bits_from_2d(x, y, ICON_WIDTH, ICON_HEIGHT,
+				((struct icon_component*)ptr->comp)->bitmap);
+			text(x + (ICON_WIDTH
+					- get_text_width(pt,
+					((struct icon_component*)ptr->comp)->text)
+					 ) / 2,
+				y + 45,
+				pt,
+				((struct icon_component*)ptr->comp)->text,
+				GRAY(0));
 			break;
 		case TEXT:
-			text(base_x + ptr->x, base_y + ptr->y,
-				((struct text_component*)ptr->comp)->pt,
+			text(x, y, ((struct text_component*)ptr->comp)->pt,
 				((struct text_component*)ptr->comp)->text,
 				((struct text_component*)ptr->comp)->color);
 			break;

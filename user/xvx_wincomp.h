@@ -35,23 +35,24 @@ struct fill_component
 
 struct button_component
 {
-	// the identifier
-	int length;
-	char *text;
+	int dummy, dummy2;	// I don't know why but these should
+	char text[1];		// be here in order to work
 };
 
 struct icon_component
 {
-	int length;
-	int bmp_width;
-	int bmp_height;
-	void *bitmap;
+#define ICON_EXE	0
+#define	ICON_BMP	1
+#define ICON_DIR	2
+#define ICON_ETC	3
+#define ICON_COUNT	4
+	int type;
+	int (*bitmap)[];
 	char text[1];
 };
 
 struct text_component
 {
-	int length;
 	int pt;
 	int color;
 	char text[1];
