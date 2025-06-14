@@ -43,6 +43,8 @@ struct button_component
 struct icon_component
 {
 	int length;
+	int bmp_width;
+	int bmp_height;
 	void *bitmap;
 	char text[1];
 };
@@ -50,6 +52,8 @@ struct icon_component
 struct text_component
 {
 	int length;
+	int pt;
+	int color;
 	char text[1];
 };
 

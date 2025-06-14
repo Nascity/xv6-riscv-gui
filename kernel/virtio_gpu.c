@@ -40,6 +40,7 @@ static struct gpu
 
 	// lock for gpu operations
 	struct spinlock gpu_lock;
+	struct spinlock call_lock;
 
 	// the dimension of the screen
 	uint32 width;
@@ -63,6 +64,7 @@ virtio_gpu_init(void)
 	uint32 vendor = *R(VIRTIO_MMIO_VENDOR_ID);
 
 	initlock(&gpu.gpu_lock, "gpu");
+	initlock(&gpu.call_lock, "call");
 
 	if (magic != 0x74726976 || vendor != 0x554d4551 || device != 16)
 	{
@@ -325,6 +327,8 @@ static volatile uint32 *get_pixel_addr(uint16 x, uint16 y, int i, int j)
 
 void draw_fill(uint16 x, uint16 y, uint16 width, uint16 height, uint32 color)
 {
+	acquire(&gpu.call_lock);
+
 	if (!gpu.fb_addr)
 		panic("fb is null!");
 	else if (gpu_panicked)
@@ -334,10 +338,14 @@ void draw_fill(uint16 x, uint16 y, uint16 width, uint16 height, uint32 color)
 		for (int j = 0; j < width && x + j < gpu.width; j++)
 			*get_pixel_addr(x, y, i, j) = color;
 	virtio_gpu_apply(x, y, width, height);
+
+	release(&gpu.call_lock);
 }
 
 void draw_bits(uint16 x, uint16 y, uint16 width, uint16 height, uint32 *bits, int size)
 {
+	acquire(&gpu.call_lock);
+
 	if (!gpu.fb_addr)
 		panic("fb is null!");
 	else if (gpu_panicked)
@@ -348,6 +356,8 @@ void draw_bits(uint16 x, uint16 y, uint16 width, uint16 height, uint32 *bits, in
 			if (i * width + j <= size)
 				*get_pixel_addr(x, y, i, j) = bits[i * width + j];
 	virtio_gpu_apply(0, 0, gpu.width, gpu.height);
+
+	release(&gpu.call_lock);
 }
 
 void gpu_panic(char *msg)

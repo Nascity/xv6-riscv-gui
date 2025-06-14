@@ -32,7 +32,7 @@ void move_to_top(struct win *pw);
 void *make_fill_comp(int color);
 void *make_button_comp(char *text, int len);
 void *make_icon_comp(void *bitmap, char *text, int len);
-void *make_text_comp(char *text, int len);
+void *make_text_comp(char *text, int len, int pt, int color);
 void add_components(struct win *pw, int comptype, int rel_x, int rel_y, int width, int height, void *info);
 
 // draw operation
@@ -71,166 +71,169 @@ char *cursor[] = {
 #define ALPHABET_BASE_WIDTH		ALPHABET_BASE_SIZE
 #define ALPHABET_BASE_HEIGHT		ALPHABET_BASE_SIZE
 #define RATIO(x, pt)			(((x) * ALPHABET_BASE_SIZE) / (pt))
+#define SPACE(pt)			((pt) + (pt) / 10)
 void chr(int x, int y, int pt, char ch, int color);
 void text(int x, int y, int pt, char *text, int color);
 int get_text_width(int pt, char *text);
 
-char *alphabet[] = {
+char *alphabet[26][5] = {
+	{
     " ooo ",
     "o   o",
     "ooooo",
     "o   o",
     "o   o",
-
+	}, {
     "oooo ",
     "o   o",
     "oooo ",
     "o   o",
     "oooo ",
-
+	}, {
     " oooo",
     "o    ",
     "o    ",
     "o    ",
     " oooo",
-
+	}, {
     "oooo ",
     "o   o",
     "o   o",
     "o   o",
     "oooo ",
-
+	}, {
     "ooooo",
     "o    ",
     "oooo ",
     "o    ",
     "ooooo",
-
+	}, {
     "ooooo",
     "o    ",
     "oooo ",
     "o    ",
     "o    ",
-
+	}, {
     " oooo",
     "o    ",
     "o ooo",
     "o   o",
     " oooo",
-
+	}, {
     "o   o",
     "o   o",
     "ooooo",
     "o   o",
     "o   o",
-
+	}, {
     " ooo ",
     "  o  ",
     "  o  ",
     "  o  ",
     " ooo ",
-
+	}, {
     "    o",
     "    o",
     "    o",
     "o   o",
     " ooo ",
-
+	}, {
     "o   o",
     "o  o ",
     "ooo  ",
     "o  o ",
     "o   o",
-
+	}, {
     "o    ",
     "o    ",
     "o    ",
     "o    ",
     "ooooo",
-
+	}, {
     "o   o",
     "oo oo",
     "o o o",
     "o   o",
     "o   o",
-
+	}, {
     "o   o",
     "oo  o",
     "o o o",
     "o  oo",
     "o   o",
-
+	}, {
     " ooo ",
     "o   o",
     "o   o",
     "o   o",
     " ooo ",
-
+	}, {
     "oooo ",
     "o   o",
     "oooo ",
     "o    ",
     "o    ",
-
+	}, {
     " ooo ",
     "o   o",
     "o   o",
     "o  o ",
     " oo o",
-
+	}, {
     "oooo ",
     "o   o",
     "oooo ",
     "o  o ",
     "o   o",
-
+	}, {
     " oooo",
     "o    ",
     " ooo ",
     "    o",
     "oooo ",
-
+	}, {
     "ooooo",
     "  o  ",
     "  o  ",
     "  o  ",
     "  o  ",
-
+	}, {
     "o   o",
     "o   o",
     "o   o",
     "o   o",
     " oooo",
-
+	}, {
     "o   o",
     "o   o",
     "o   o",
     " o o ",
     "  o  ",
-
+	}, {
     "o   o",
     "o   o",
     "o o o",
     "oo oo",
     "o   o",
-
+	}, {
     "o   o",
     " o o ",
     "  o  ",
     " o o ",
     "o   o",
-
+	}, {
     "o   o",
     "o   o",
     " oooo",
     "    o",
     "oooo ",
-
+	}, {
     "ooooo",
     "   o ",
     "  o  ",
     " o   ",
     "ooooo"
+	}
 };
 
 
@@ -239,11 +242,9 @@ int main(int argc, char *argv[])
 {
 	register_wm();
 
-	shell_index = register_window("XvX shell", 0, 0, 0, 1000, 700, 0, DEFAULT_WINDOW);
-	/*
 	shell_index = register_window("XvX shell", 0, 0, 0, MONITOR_WIDTH, MONITOR_HEIGHT, 0, NO_TOP_BAR);
-	*/
-	register_window("Test window", 0, 390, 250, 500, 300, 0, DEFAULT_WINDOW);
+	// register_window("Test window", 0, 390, 250, 500, 300, 0, DEFAULT_WINDOW);
+	
 	if (shell_index == -1)
 	{
 		printf("Cannot register shell window.\n");
@@ -275,13 +276,6 @@ int main(int argc, char *argv[])
 void init_wm(void)
 {
 	int i, j;
-
-	/*
-	add_components(zl.bottom->win, FILL, 0, 0,
-			MONITOR_WIDTH, MONITOR_HEIGHT,
-			make_fill_comp(BACKGROUND_COLOR));
-			*/
-
 	int fd = open("/", 0);
 	struct dirent de;
 
@@ -322,20 +316,23 @@ void rect(int x, int y, int width, int height, int rgb)
 				screen_buffer[i][j] = rgb;
 }
 
-char *get_alpha(char ch)
+char **get_alpha(char ch)
 {
 	if (ch >= 'a' && ch <= 'z')
 		ch -= ('a' - 'A');
 	if (ch < 'A' || ch > 'Z')
 		return 0;
 
-	return alphabet[ALPHABET_BASE_SIZE * (ch - 'A')];
+	return alphabet[ch - 'A'];
 }
 
 void chr(int x, int y, int pt, char ch, int color)
 {
-	char *alpha = get_alpha(ch);
+	char **alpha = get_alpha(ch);
 	int i, j;
+
+	if (!alpha)
+		return;
 
 	for (i = 0; i < pt && y + i < MONITOR_HEIGHT; i++)
 	{
@@ -344,8 +341,8 @@ void chr(int x, int y, int pt, char ch, int color)
 			int here_x = RATIO(j, pt);
 			int here_y = RATIO(i, pt);
 
-			if ((alpha + here_y)[here_x] == 'o')
-				screen_buffer[y + here_y][x + here_x] = color;
+			if (alpha[here_y][here_x] == 'o')
+				screen_buffer[y + i][x + j] = color;
 		}
 	}
 }
@@ -353,12 +350,12 @@ void chr(int x, int y, int pt, char ch, int color)
 void text(int x, int y, int pt, char *text, int color)
 {
 	int j, count;
-
+	
 	if (pt < 5)
 		pt = 5;
 	for (j = x, count = 0;
 		j < MONITOR_WIDTH && text[count];
-		j += pt + pt / 5, count++)
+		j += SPACE(pt), count++)
 		chr(j, y, pt, text[count], color);
 }
 
@@ -366,7 +363,7 @@ int get_text_width(int pt, char *text)
 {
 	int j, count;
 
-	for (count = 0, j = 0; text[count]; j += pt + pt / 5, count++);
+	for (count = 0, j = 0; text[count]; j += SPACE(pt), count++);
 	return j;
 }
 
@@ -375,6 +372,7 @@ void draw_cursor(int x, int y, int color)
 	int i, j;
 	int cursor_buffer[CURSOR_WIDTH * CURSOR_HEIGHT];
 
+	invalidate_region(last_pos_x, last_pos_y, CURSOR_WIDTH, CURSOR_HEIGHT);
 	for (i = 0; i < CURSOR_HEIGHT; i++)
 		for (j = 0; j < CURSOR_WIDTH; j++)
 		{
@@ -415,9 +413,10 @@ void click_cursor(int x, int y, int pressed)
 		draw_cursor(x, y, RGB(0, 0, 0));
 }
 
+unsigned int buf[1280 * 800];
+
 void invalidate_region(int x, int y, int width, int height)
 {
-	unsigned int *buf;
 	int i, j;
 
 	if (x < 0)
@@ -435,14 +434,11 @@ void invalidate_region(int x, int y, int width, int height)
 	if (y + height > MONITOR_HEIGHT)
 		height -= y + height - MONITOR_HEIGHT;
 
-	buf = malloc(sizeof(int) * width * height);
 
 	for (i = 0; i < height; i++)
 		for (j = 0; j < width; j++)
-			buf[i * width + j] = screen_buffer[i][j];
+			buf[i * width + j] = screen_buffer[y + i][x + j];
 	draw_bits(x, y, width, height, buf, width * height);
-
-	free(buf);
 }
 
 // receives kernel message and returns it via pointer
@@ -530,12 +526,14 @@ void *make_icon_comp(void *bitmap, char *text, int len)
 	return (void*)pic;
 }
 
-void *make_text_comp(char *text, int len)
+void *make_text_comp(char *text, int len, int pt, int color)
 {
 	struct text_component *ptc = malloc(sizeof(struct text_component) + len);
 	int i;
 
 	ptc->length = len;
+	ptc->pt = pt;
+	ptc->color = color;
 	for (i = 0; i < len; i++)
 		ptc->text[i] = text[i];
 
@@ -601,43 +599,6 @@ void move_to_top(struct win *pw)
 	zl.top = movz;
 }
 
-void update_invalid_rect(struct win *pw, struct rect *rct)
-{
-	if (pw->maximized)
-	{
-		rct->left = rct-> top = 0;
-		rct->right = MONITOR_WIDTH;
-		rct->bottom = MONITOR_HEIGHT;
-	}
-	if (rct->left == rct->right && rct->right == rct->top
-		&& rct->top == rct-> bottom && rct->bottom == INVALID_RECT)
-	{
-		rct->left = pw->x;
-		rct->right = pw->x + pw->width;
-		rct->top = pw->y;
-		rct->bottom = pw->y + pw->height;
-		return;
-	}
-	
-	if (pw->x < rct->left)
-		rct->left = pw->x;
-	if (pw->x + pw->width > rct->right)
-		rct->right = pw->x + pw->width;
-	if (pw->y < rct->top)
-		rct->top = pw->y;
-	if (pw->y + pw->height > rct->bottom)
-		rct->bottom = pw->y + pw->height;
-}
-
-void clear_screen_buffer(void)
-{
-	int i, j;
-
-	for (i = 0; i < MONITOR_HEIGHT; i++)
-		for (j = 0; j < MONITOR_WIDTH; j++)
-			screen_buffer[i][j] = RGB(0, 255, 0);
-}
-
 void render_top_bar(struct win *pw)
 {
 	int x, y, width, draw_type;
@@ -680,7 +641,12 @@ void render_top_bar(struct win *pw)
 
 	// title
 	int text_width = get_text_width(TOP_BAR_TEXT_SIZE, pw->title);
-	text(width - text_width / 2, TOP_BAR_TEXT_MARGIN, TOP_BAR_TEXT_SIZE, pw->title, 0);
+	text(x + (width - text_width) / 2,
+		y + TOP_BAR_TEXT_MARGIN,
+		TOP_BAR_TEXT_SIZE,
+		pw->title,
+		RGB(0, 0, 0)
+		);
 }
 
 void render_window(struct win *pw)
@@ -718,23 +684,33 @@ void render_window(struct win *pw)
 
 void render_components(struct win *pw)
 {
+	int base_x, base_y;
+
+	base_x = pw->x;
+	base_y = pw->y + TOP_BAR_HEIGHT;
+	if (pw->win_draw_type & BORDER)
+		base_x += BORDER_THICKNESS;
+
 	for (struct wincomponent *ptr = pw->first; ptr; ptr = ptr->next)
 	{
 		switch (ptr->comp_type)
 		{
 		case FILL:
-			rect(pw->x + ptr->x, pw->y + ptr->y,
+			rect(base_x + ptr->x, base_y + ptr->y,
 				ptr->width, ptr->height,
 				((struct fill_component*)ptr->comp)->color);
 			break;
 		case BUTTON:
-
+			
 			break;
 		case ICON:
 
 			break;
 		case TEXT:
-
+			text(base_x + ptr->x, base_y + ptr->y,
+				((struct text_component*)ptr->comp)->pt,
+				((struct text_component*)ptr->comp)->text,
+				((struct text_component*)ptr->comp)->color);
 			break;
 		default:
 			break;
@@ -745,21 +721,14 @@ void render_components(struct win *pw)
 void render(void)
 {
 	struct z *pz;
-	struct rect inv;
-
-	inv.left = inv.right = inv.top = inv.bottom = INVALID_RECT;
-	clear_screen_buffer();
 
 	for (pz = zl.bottom; pz; pz = pz->higher)
 	{
-
-		update_invalid_rect(pz->win, &inv);
-
 		if (pz->win->minimized)
 			continue;
 		render_window(pz->win);
 		render_components(pz->win);
 	}
 
-	invalidate_region(inv.left, inv.top, inv.right - inv.left, inv.bottom - inv.top);
+	invalidate_region(0, 0, MONITOR_WIDTH, MONITOR_HEIGHT);
 }
