@@ -1,11 +1,13 @@
 #include "kernel/types.h"
 #include "kernel/input_events.h"
+#include "kernel/fs.h"
 #include "user/user.h"
 #include "xvx_wintypes.h"
 #include "xvx_wincomp.h"
 
 struct z_list zl;
 winident_t id_track;
+wincomp_t comp_id_track;
 int shell_index;
 
 // Z operation
@@ -22,6 +24,16 @@ void init_wm(void);
 void exit_wm(int);
 
 int register_window(const char *title, int owner, int x, int y, int width, int height, struct win *parent, int draw_type);
+
+void add_to_top(struct win *pw);
+void move_to_top(struct win *pw);
+
+// component operations
+void *make_fill_comp(int color);
+void *make_button_comp(char *text, int len);
+void *make_icon_comp(void *bitmap, char *text, int len);
+void *make_text_comp(char *text, int len);
+void add_components(struct win *pw, int comptype, int rel_x, int rel_y, int width, int height, void *info);
 
 // draw operation
 void rect(int x, int y, int width, int height, int rgb);
@@ -41,6 +53,9 @@ int screen_buffer[MONITOR_HEIGHT][MONITOR_WIDTH];
 #define CURSOR_RESIZE	5
 #define CURSOR_WIDTH	(CURSOR_BASE_WIDTH * CURSOR_RESIZE)
 #define CURSOR_HEIGHT	(CURSOR_BASE_HEIGHT * CURSOR_RESIZE)
+int last_pos_x;
+int last_pos_y;
+
 char *cursor[] = {
 	"o    ",
 	"oo   ",
@@ -50,19 +65,16 @@ char *cursor[] = {
 	" o   ",
 	" o   ",
 };
-int last_pos_x;
-int last_pos_y;
 
 // text
-#define ALPHABET_BASE_WIDTH		5
-#define ALPHABET_BASE_HEIGHT		5
-#define GET_ALPHA_FROM_LOWER(ch)	((char*)&alphabet[((ch) - 'a') * ALPHA_BASE_HEIGHT])
-#define GET_ALPHA_FROM_UPPER(ch)	((char*)&alphabet[((ch) - 'A') * ALPHA_BASE_HEIGHT])
-#define GET_ALPHA(ch)			(((ch) >= 'A') && (ch) <= 'Z'	?	\
-					GET_ALPHA_FROM_UPPER(ch)	:	\
-					((ch) >= 'a' && (ch) <= 'z'	?	\
-					GET_ALPHA_FROM_LOWER(ch)	:	\
-					(char*)0))
+#define ALPHABET_BASE_SIZE		5
+#define ALPHABET_BASE_WIDTH		ALPHABET_BASE_SIZE
+#define ALPHABET_BASE_HEIGHT		ALPHABET_BASE_SIZE
+#define RATIO(x, pt)			(((x) * ALPHABET_BASE_SIZE) / (pt))
+void chr(int x, int y, int pt, char ch, int color);
+void text(int x, int y, int pt, char *text, int color);
+int get_text_width(int pt, char *text);
+
 char *alphabet[] = {
     " ooo ",
     "o   o",
@@ -226,19 +238,19 @@ char *alphabet[] = {
 int main(int argc, char *argv[])
 {
 	register_wm();
-	init_wm();
 
+	shell_index = register_window("XvX shell", 0, 0, 0, 1000, 700, 0, DEFAULT_WINDOW);
 	/*
-	shell_index = register_window("XvX shell", 0, 0, 0,
-			MONITOR_WIDTH, MONITOR_HEIGHT, 0, SHELL_TEST);
-			*/
 	shell_index = register_window("XvX shell", 0, 0, 0, MONITOR_WIDTH, MONITOR_HEIGHT, 0, NO_TOP_BAR);
+	*/
 	register_window("Test window", 0, 390, 250, 500, 300, 0, DEFAULT_WINDOW);
 	if (shell_index == -1)
 	{
 		printf("Cannot register shell window.\n");
 		exit_wm(-1);
 	}
+
+	init_wm();
 
 	while (1)
 	{
@@ -264,10 +276,34 @@ void init_wm(void)
 {
 	int i, j;
 
-	for (i = 0; i < MONITOR_HEIGHT; i++)
-		for (j = 0; j < MONITOR_WIDTH; j++)
-			screen_buffer[i][j] = BACKGROUND_COLOR;
-	rect(0, 0, MONITOR_WIDTH, MONITOR_HEIGHT, BACKGROUND_COLOR);
+	/*
+	add_components(zl.bottom->win, FILL, 0, 0,
+			MONITOR_WIDTH, MONITOR_HEIGHT,
+			make_fill_comp(BACKGROUND_COLOR));
+			*/
+
+	int fd = open("/", 0);
+	struct dirent de;
+
+	if (fd < 0)
+	{
+		printf("cannot open root dir!\n");
+		exit_wm(-1);
+	}
+
+	i = j = 0;
+	while (read(fd, &de, sizeof(de)) == sizeof(de))
+	{
+		if (de.inum == 0)
+			continue;
+		add_components(zl.bottom->win, ICON,
+				j * DESKTOP_ICON_WIDTH,
+				i * DESKTOP_ICON_HEIGHT,
+				DESKTOP_ICON_WIDTH,
+				DESKTOP_ICON_HEIGHT,
+				make_icon_comp(0, de.name, strlen(de.name))
+			      );
+	}
 }
 
 void exit_wm(int exit_code)
@@ -284,6 +320,54 @@ void rect(int x, int y, int width, int height, int rgb)
 		for (j = x; j < x + width && j < MONITOR_WIDTH; j++)
 			if (i > 0 && j > 0)
 				screen_buffer[i][j] = rgb;
+}
+
+char *get_alpha(char ch)
+{
+	if (ch >= 'a' && ch <= 'z')
+		ch -= ('a' - 'A');
+	if (ch < 'A' || ch > 'Z')
+		return 0;
+
+	return alphabet[ALPHABET_BASE_SIZE * (ch - 'A')];
+}
+
+void chr(int x, int y, int pt, char ch, int color)
+{
+	char *alpha = get_alpha(ch);
+	int i, j;
+
+	for (i = 0; i < pt && y + i < MONITOR_HEIGHT; i++)
+	{
+		for (j = 0; j < pt && x + j < MONITOR_WIDTH; j++)
+		{
+			int here_x = RATIO(j, pt);
+			int here_y = RATIO(i, pt);
+
+			if ((alpha + here_y)[here_x] == 'o')
+				screen_buffer[y + here_y][x + here_x] = color;
+		}
+	}
+}
+
+void text(int x, int y, int pt, char *text, int color)
+{
+	int j, count;
+
+	if (pt < 5)
+		pt = 5;
+	for (j = x, count = 0;
+		j < MONITOR_WIDTH && text[count];
+		j += pt + pt / 5, count++)
+		chr(j, y, pt, text[count], color);
+}
+
+int get_text_width(int pt, char *text)
+{
+	int j, count;
+
+	for (count = 0, j = 0; text[count]; j += pt + pt / 5, count++);
+	return j;
 }
 
 void draw_cursor(int x, int y, int color)
@@ -335,8 +419,6 @@ void invalidate_region(int x, int y, int width, int height)
 {
 	unsigned int *buf;
 	int i, j;
-
-	printf("%d %d %d %d\n", x, y, width, height);
 
 	if (x < 0)
 	{
@@ -404,6 +486,7 @@ int register_window(const char *title, int owner, int x, int y, int width, int h
 	ptr->parent = parent;
 	ptr->num_children = 0;
 	ptr->win_draw_type = draw_type;
+	ptr->first = 0;
 	ptr->maximized = 0;
 	ptr->minimized = 0;
 	strcpy(ptr->title, title);
@@ -411,6 +494,69 @@ int register_window(const char *title, int owner, int x, int y, int width, int h
 	add_to_top(ptr);
 
 	return ptr->id;
+}
+
+void *make_fill_comp(int color)
+{
+	struct fill_component *pfc = malloc(sizeof(struct fill_component));
+
+	pfc->color = color;
+
+	return (void*)pfc;
+}
+
+void *make_button_comp(char *text, int len)
+{
+	struct button_component *pbc = malloc(sizeof(struct button_component) + len);
+	int i;
+
+	pbc->length = len;
+	for (i = 0; i < len; i++)
+		pbc->text[i] = text[i];
+
+	return (void*)pbc;
+}
+
+void *make_icon_comp(void *bitmap, char *text, int len)
+{
+	struct icon_component *pic = malloc(sizeof(struct icon_component) + len);
+	int i;
+
+	pic->length = len;
+	pic->bitmap = bitmap;
+	for (i = 0; i < len; i++)
+		pic->text[i] = text[i];
+
+	return (void*)pic;
+}
+
+void *make_text_comp(char *text, int len)
+{
+	struct text_component *ptc = malloc(sizeof(struct text_component) + len);
+	int i;
+
+	ptc->length = len;
+	for (i = 0; i < len; i++)
+		ptc->text[i] = text[i];
+
+	return (void*)ptc;
+}
+
+void add_components(struct win *pw, int comptype, int rel_x, int rel_y, int width, int height, void *info)
+{
+	struct wincomponent *pwc = malloc(sizeof(struct wincomponent));
+
+	pwc->id = comp_id_track++;
+	pwc->comp_type = comptype;
+	pwc->x = rel_x;
+	pwc->y = rel_y;
+	pwc->width = width;
+	pwc->height = height;
+	pwc->parent = pw;
+	pwc->comp = info;
+	pwc->next = pw->first;
+
+	pw->first = pwc;
 }
 
 void add_to_top(struct win *pw)
@@ -531,6 +677,10 @@ void render_top_bar(struct win *pw)
 				TOP_BAR_BUTTON_SIZE - TOP_BAR_BUTTON_MARGIN * 2,
 				TOP_BAR_BUTTON_SIZE - TOP_BAR_BUTTON_MARGIN * 2,
 				MIN_BUTTON_COLOR);
+
+	// title
+	int text_width = get_text_width(TOP_BAR_TEXT_SIZE, pw->title);
+	text(width - text_width / 2, TOP_BAR_TEXT_MARGIN, TOP_BAR_TEXT_SIZE, pw->title, 0);
 }
 
 void render_window(struct win *pw)
@@ -568,7 +718,28 @@ void render_window(struct win *pw)
 
 void render_components(struct win *pw)
 {
+	for (struct wincomponent *ptr = pw->first; ptr; ptr = ptr->next)
+	{
+		switch (ptr->comp_type)
+		{
+		case FILL:
+			rect(pw->x + ptr->x, pw->y + ptr->y,
+				ptr->width, ptr->height,
+				((struct fill_component*)ptr->comp)->color);
+			break;
+		case BUTTON:
 
+			break;
+		case ICON:
+
+			break;
+		case TEXT:
+
+			break;
+		default:
+			break;
+		}
+	}
 }
 
 void render(void)
@@ -581,6 +752,7 @@ void render(void)
 
 	for (pz = zl.bottom; pz; pz = pz->higher)
 	{
+
 		update_invalid_rect(pz->win, &inv);
 
 		if (pz->win->minimized)

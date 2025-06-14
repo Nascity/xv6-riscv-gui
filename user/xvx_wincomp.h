@@ -36,15 +36,21 @@ struct fill_component
 struct button_component
 {
 	// the identifier
-	char *text;
 	int length;
+	char *text;
 };
 
 struct icon_component
 {
-	void *bitmap;
-	char *text;
 	int length;
+	void *bitmap;
+	char text[1];
+};
+
+struct text_component
+{
+	int length;
+	char text[1];
 };
 
 #endif
