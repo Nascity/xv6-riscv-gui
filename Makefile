@@ -146,8 +146,8 @@ UPROGS=\
 	$U/_sender\
 	$U/_xvx_wm
 
-fs.img: mkfs/mkfs README $(UPROGS)
-	mkfs/mkfs fs.img README dir.bmp		\
+fs.img: mkfs/mkfs README.md dir.bmp exe.bmp img.bmp $(UPROGS)
+	mkfs/mkfs fs.img README.md dir.bmp		\
 		exe.bmp img.bmp $(UPROGS)
 
 -include kernel/*.d user/*.d

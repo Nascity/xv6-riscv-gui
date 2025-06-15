@@ -5,6 +5,7 @@
 #include "user/user.h"
 #include "xvx_wintypes.h"
 #include "xvx_wincomp.h"
+#include "xvx_winmsg.h"
 
 struct z_list zl;
 winident_t id_track;
@@ -19,6 +20,7 @@ void move_to_top(struct win *pw);
 // msg operations
 #define TIMEOUT		10
 int recv_kernel_msg(struct wmmsg* pmsg);
+void send_msg_to_coord(int x, int y, int code, int param0, int param1);
 void send_msg_to_proc(int pid, int code, int param0, int param1);
 
 // window operations
@@ -27,6 +29,7 @@ void init_welcome(void);
 void exit_wm(int);
 
 struct win *register_window(const char *title, int owner, int x, int y, int width, int height, struct win *parent, int draw_type);
+struct win *find_window_in_coord(int x, int y);
 
 // component operations
 void *make_fill_comp(int color);
@@ -258,10 +261,10 @@ int main(int argc, char *argv[])
 	register_wm();
 	load_bitmaps();
 
-	shell = register_window("XvX shell", 0,
+	shell = register_window("XvX shell", getpid(),
 			0, 0, MONITOR_WIDTH, MONITOR_HEIGHT,
 			0, NO_TOP_BAR);
-	welcome = register_window("WELCOME", 0,
+	welcome = register_window("WELCOME", getpid(),
 			WELCOME_WINDOW_X, WELCOME_WINDOW_Y,
 			WELCOME_WINDOW_WIDTH, WELCOME_WINDOW_HEIGHT,
 			0, DEFAULT_WINDOW);
@@ -298,6 +301,7 @@ int main(int argc, char *argv[])
 void load_bitmaps(void)
 {
 	int i, x, y;
+	int count;
 	char buffer[BMP_HEADER_SIZE];
 	char color_buf[3];
 
@@ -314,22 +318,39 @@ void load_bitmaps(void)
 			exit_wm(-1);
 		}
 
-		read(fd, buffer, BMP_HEADER_SIZE);
+		read(fd, buffer, 0x0D);
+		int size = (int)buffer[0x0A];
+		read(fd, buffer, size - 0x0D);
 
-		for (y = 0; y < ICON_HEIGHT; y++)
+		for (y = ICON_HEIGHT - 1, count = 0; y >= 0; y--, count = 0)
 		{
-			for (x = 0; x < ICON_WIDTH; x++)
+			for (x = 0; x < ICON_WIDTH; x++, count += 3)
 			{
+				// works for some reason
+				color_buf[0] = 0;
+				color_buf[1] = 0;
+				color_buf[2] = 0;
+
 				read(fd, color_buf, 3);
 				icons[i][y][x] = RGB(color_buf[2],
 						color_buf[1],
 						color_buf[0]);
 			}
-			read(fd, buffer, 2);
+			read(fd, buffer, 4 - (count / 3) % 4);
 		}
 
 		close(fd);
 	}
+}
+
+int is_ext(char *filename, char *extension)
+{
+	int i;
+
+	for (i = 0; filename[i]; i++)
+		if (filename[i] == '.')
+			return !strcmp(&filename[i + 1], extension);
+	return 0;
 }
 
 void init_wm(void)
@@ -363,11 +384,10 @@ void init_wm(void)
 			type = ICON_DIR;
 			break;
 		}
-		for (int i = 0, len = strlen(de.name); i < 3; i++)
-			if (de.name[len - 3 + i] != "bmp"[i])
-				break;
-		if (i == 3)
+		if (is_ext(de.name, "bmp"))
 			type = ICON_BMP;
+		else if (is_ext(de.name, "txt") || is_ext(de.name, "md"))
+			type = ICON_ETC;
 
 		add_components(shell, ICON,
 				j * (DESKTOP_ICON_WIDTH + DESKTOP_ICON_MARGIN) + DESKTOP_ICON_MARGIN,
@@ -487,7 +507,7 @@ int get_text_width(int pt, char *text)
 	return j;
 }
 
-void bits_from_2d(int x, int y, int width, int height, int (*bitmap)[ICON_HEIGHT])
+void bits_from_2d(int x, int y, int width, int height, int (*bitmap)[ICON_WIDTH])
 {
 	int i, j;
 
@@ -506,7 +526,6 @@ void draw_cursor(int x, int y, int color)
 	int i, j;
 	int cursor_buffer[CURSOR_WIDTH * CURSOR_HEIGHT];
 
-	invalidate_region(last_pos_x, last_pos_y, CURSOR_WIDTH, CURSOR_HEIGHT);
 	for (i = 0; i < CURSOR_HEIGHT; i++)
 		for (j = 0; j < CURSOR_WIDTH; j++)
 		{
@@ -528,6 +547,7 @@ void draw_cursor(int x, int y, int color)
 	if (x < SAFE_MARGIN || x + CURSOR_WIDTH > MONITOR_WIDTH - SAFE_MARGIN
 		|| y < SAFE_MARGIN || y + CURSOR_HEIGHT > MONITOR_HEIGHT - SAFE_MARGIN)
 		return;
+	invalidate_region(last_pos_x, last_pos_y, CURSOR_WIDTH, CURSOR_HEIGHT);
 	draw_bits(x, y, CURSOR_WIDTH, CURSOR_HEIGHT, (uint32*)cursor_buffer, CURSOR_WIDTH * CURSOR_HEIGHT);
 
 	last_pos_x = x;
@@ -537,14 +557,21 @@ void draw_cursor(int x, int y, int color)
 void update_cursor(int x, int y)
 {
 	draw_cursor(x, y, RGB(0, 0, 0));
+	
 }
 
 void click_cursor(int x, int y, int pressed)
 {
 	if (pressed)
+	{
 		draw_cursor(x, y, RGB(0, 255, 0));
+		send_msg_to_coord(x, y, WM_BUTTONDOWN, MAKEPARAM(x, y), 0);
+	}
 	else
+	{
 		draw_cursor(x, y, RGB(0, 0, 0));
+		send_msg_to_coord(x, y, WM_BUTTONUP, MAKEPARAM(x, y), 0);
+	}
 }
 
 unsigned int buf[1280 * 800];
@@ -584,6 +611,15 @@ int recv_kernel_msg(struct wmmsg* pmsg)
 	return 0;
 }
 
+void send_msg_to_coord(int x, int y, int code, int param0, int param1)
+{
+	struct win *pw = find_window_in_coord(x, y);
+
+	if (!pw)
+		return;
+	send_msg_to_proc(pw->owner, code, param0, param1);
+}
+
 void send_msg_to_proc(int pid, int code, int param0, int param1)
 {
 	struct wmmsg msg;
@@ -621,6 +657,28 @@ struct win *register_window(const char *title, int owner, int x, int y, int widt
 	add_to_top(ptr);
 
 	return ptr;
+}
+
+struct win *find_window_in_coord(int x, int y)
+{
+	struct z *pz;
+	int x_diff, y_diff;
+
+	for (pz = zl.top; pz; pz = pz->lower)
+	{
+		if (pz->win->minimized)
+			continue;
+
+		x_diff = x - pz->win->x;
+		y_diff = y - pz->win->y;
+
+		if (x_diff >= 0 && y_diff >= 0
+			&& x_diff <= pz->win->width
+			&& y_diff <= pz->win->height)
+			return pz->win;
+	}
+	
+	return 0;
 }
 
 void *make_fill_comp(int color)
