@@ -182,9 +182,6 @@ sys_send_msg(void)
 	return send_msg(p, kernel_buf, size, 1);
 }
 
-// LOCK IS VERY DANGEROUS!!
-// IF MESSAGE PASSING FAILS,
-// THIS IS THE CULPRIT!!
 uint64
 sys_recv_msg(void)
 {
@@ -202,7 +199,10 @@ sys_recv_msg(void)
 	if ((long long)pm < 0)
 		return -1;
 	if (copyout(p->pagetable, user_buf, (char*)pm->msg, pm->size))
-		panic("recv_msg - copyout failed");
+		return -1;
+		//panic("recv_msg - copyout failed");	DO NOT DELETE THIS LINE
+		//					FOR SOME REASON, THIS
+		//					LINE MAKES THE CODE WORK
 
 	return 0;
 }

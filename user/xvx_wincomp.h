@@ -45,7 +45,8 @@ struct icon_component
 #define	ICON_BMP	1
 #define ICON_DIR	2
 #define ICON_ETC	3
-#define ICON_COUNT	4
+#define ICON_TXT	4
+#define ICON_COUNT	5
 	int type;
 	int (*bitmap)[];
 	char text[1];

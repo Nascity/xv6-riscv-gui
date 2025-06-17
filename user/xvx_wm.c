@@ -8,10 +8,14 @@
 #include "xvx_winmsg.h"
 
 struct z_list zl;
-winident_t id_track;
-wincomp_t comp_id_track;
+winident_t id_track = 1;
+wincomp_t comp_id_track = 1;
+
 struct win *shell;
 struct win *welcome;
+struct wincomponent *welcome_button;
+
+wincomp_t desktop_icon_inclusive;
 
 // Z operation
 void add_to_top(struct win *pw);
@@ -32,6 +36,9 @@ void destroy_window(struct win *pw);
 struct win *find_window_in_coord(int x, int y);
 struct wincomponent *find_component_in_coord(struct win *pw, int x, int y);
 int check_top_bar_click(struct win *pw, int x, int y);
+
+// shell operations
+void shell_execute(int index);
 
 // component operations
 void *make_fill_comp(int color);
@@ -300,6 +307,18 @@ int main(int argc, char *argv[])
 			else
 				draw_cursor(X(msg.param0), Y(msg.param0), RGB(0, 0, 0));
 			break;
+		case WM_BUTTONUP:
+			if (welcome_button && msg.param1 == welcome_button->id)
+			{
+				destroy_window(welcome);
+				welcome_button = 0;
+				welcome = 0;
+			}
+			else if (msg.param1 > 0 && msg.param1 <= desktop_icon_inclusive)
+				shell_execute(msg.param1);
+			render();
+			update_cursor(X(msg.param0), Y(msg.param0));
+			break;
 		}
 	}
 }
@@ -361,7 +380,7 @@ int is_ext(char *filename, char *extension)
 
 void init_wm(void)
 {
-	int i, j;
+	int i, j, count;
 	int fd = open("/", 0);
 	struct dirent de;
 
@@ -371,7 +390,7 @@ void init_wm(void)
 		exit_wm(-1);
 	}
 
-	i = j = 0;
+	i = j = count = 0;
 	while (read(fd, &de, sizeof(de)) == sizeof(de))
 	{
 		if (de.inum == 0 || de.name[0] == '.')
@@ -384,7 +403,7 @@ void init_wm(void)
 		switch (st.type)
 		{
 		case T_FILE:
-			type = ICON_EXE;
+			type = ICON_ETC;
 			break;
 		case T_DIR:
 			type = ICON_DIR;
@@ -394,6 +413,8 @@ void init_wm(void)
 			type = ICON_BMP;
 		else if (is_ext(de.name, "txt") || is_ext(de.name, "md"))
 			type = ICON_ETC;
+		else if (is_ext(de.name, "exe"))
+			type = ICON_EXE;
 
 		add_components(shell, ICON,
 			j * (DESKTOP_ICON_WIDTH + DESKTOP_ICON_MARGIN)
@@ -410,19 +431,22 @@ void init_wm(void)
 			i = 0;
 			j++;
 		}
+
+		count++;
 	}
+	close(fd);
 
 	add_components(shell, FILL, 0, 0,
 			MONITOR_WIDTH, MONITOR_HEIGHT,
 			make_fill_comp(BACKGROUND_COLOR));
+
+	desktop_icon_inclusive = count;
 }
 
 void init_welcome(void)
 {
 	int actual_height = welcome->height - TOP_BAR_HEIGHT;
 	char *welcome_msg = "Welcome to XvX";
-
-	struct text_component *test;
 
 	add_components(welcome, TEXT,
 			(welcome->width - get_text_width(WELCOME_MSG_SIZE, welcome_msg)) / 2,
@@ -434,7 +458,8 @@ void init_welcome(void)
 			(welcome->height - WELCOME_BUTTON_HEIGHT) / 2 + 50,
 			WELCOME_BUTTON_WIDTH,
 			WELCOME_BUTTON_HEIGHT,
-			test = make_button_comp("OK", 3));
+			make_button_comp("OK", 3));
+	welcome_button = welcome->first;
 }
 
 void exit_wm(int exit_code)
@@ -565,8 +590,6 @@ void click_cursor(int x, int y, int pressed)
 	// sending the window message
 	if (pw)
 		pcomp = find_component_in_coord(pw, x, y);
-	if (pcomp)
-		printf("id: %d\n", pcomp->id);
 
 	if (pcomp)
 		compid = pcomp->id;
@@ -579,8 +602,7 @@ void click_cursor(int x, int y, int pressed)
 		{
 		case 0:
 			send_msg_to_proc(pw->owner, pw->id,
-				WM_BUTTONUP + pressed,
-				MAKEPARAM(x, y), compid);
+				WM_BUTTONUP, MAKEPARAM(x, y), compid);
 			break;
 		case 1:
 			send_msg_to_proc(pw->owner, pw->id,
@@ -601,6 +623,9 @@ void click_cursor(int x, int y, int pressed)
 			break;
 		}
 	}
+	else
+		send_msg_to_proc(pw->owner, pw->id,
+				WM_BUTTONDOWN, MAKEPARAM(x, y), compid);
 
 }
 
@@ -683,6 +708,9 @@ struct win *register_window(const char *title, int owner, int x, int y, int widt
 
 void destroy_window(struct win *pw)
 {
+	if (!pw)
+		return;
+
 	// set childs' parent to destorying window's parent
 	for (int i = 0; i < MAX_CHILD; i++)
 		if (pw->child[i])
@@ -816,6 +844,51 @@ int check_top_bar_click(struct win *pw, int x, int y)
 			TOP_BAR_BUTTON_SIZE, TOP_BAR_BUTTON_SIZE))
 		return 1;
 	return 0;
+}
+
+void shell_execute(int index)
+{
+	int fd = open("/", 0);
+	int i = 0, count = 0;
+	struct dirent de;
+	
+	if (fd < 0)
+	{
+		printf("shell execute 0 failed!\n");	
+		return;
+	}
+
+	while ((count = read(fd, &de, sizeof(de))) == sizeof(de))
+	{
+		if (de.inum == 0 || de.name[0] == '.')
+			continue;
+		i++;
+
+		if (index == i)
+			break;
+	}
+	close(fd);
+
+	if (!is_ext(de.name, "exe"))
+	{
+		printf("is not an executable!\n");	
+		return;
+	}
+
+	int pid = fork();
+
+	if (pid < 0)
+		printf("shell execute 2 failed!\n");	
+	else if (pid == 0)
+	{
+		char *argv[] = { 0 };
+
+		if (exec(de.name, argv))
+			printf("failed to shell execute!\n");
+		else
+			printf("This is not supposed to happen!\n");
+		exit(-1);
+	}
 }
 
 void *make_fill_comp(int color)
