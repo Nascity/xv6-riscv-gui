@@ -19,9 +19,8 @@ void move_to_top(struct win *pw);
 
 // msg operations
 #define TIMEOUT		10
-int recv_kernel_msg(struct wmmsg* pmsg);
-void send_msg_to_coord(int x, int y, int code, int param0, int param1);
-void send_msg_to_proc(int pid, int code, int param0, int param1);
+int recv_kernel_msg(struct winmsg* pmsg);
+void send_msg_to_proc(int pid, winident_t id, int code, int param0, int param1);
 
 // window operations
 void init_wm(void);
@@ -29,7 +28,10 @@ void init_welcome(void);
 void exit_wm(int);
 
 struct win *register_window(const char *title, int owner, int x, int y, int width, int height, struct win *parent, int draw_type);
+void destroy_window(struct win *pw);
 struct win *find_window_in_coord(int x, int y);
+struct wincomponent *find_component_in_coord(struct win *pw, int x, int y);
+int check_top_bar_click(struct win *pw, int x, int y);
 
 // component operations
 void *make_fill_comp(int color);
@@ -267,7 +269,7 @@ int main(int argc, char *argv[])
 	welcome = register_window("WELCOME", getpid(),
 			WELCOME_WINDOW_X, WELCOME_WINDOW_Y,
 			WELCOME_WINDOW_WIDTH, WELCOME_WINDOW_HEIGHT,
-			0, DEFAULT_WINDOW);
+			shell, DEFAULT_WINDOW);
 	
 	if (!shell)
 	{
@@ -280,19 +282,23 @@ int main(int argc, char *argv[])
 
 	while (1)
 	{
-		struct wmmsg msg;
+		struct winmsg msg;
 
 		if (recv_kernel_msg(&msg) == -1)
 			continue;
 
-		switch (msg.event_code)
+		switch (msg.code)
 		{
 		case EV_REL:
 			update_cursor(X(msg.param0), Y(msg.param0));
 			break;
 		case EV_KEY:
-			render();
 			click_cursor(X(msg.param0), Y(msg.param0), msg.param1);
+			render();
+			if (msg.param1)
+				draw_cursor(X(msg.param0), Y(msg.param0), RGB(0, 255, 0));
+			else
+				draw_cursor(X(msg.param0), Y(msg.param0), RGB(0, 0, 0));
 			break;
 		}
 	}
@@ -390,12 +396,13 @@ void init_wm(void)
 			type = ICON_ETC;
 
 		add_components(shell, ICON,
-				j * (DESKTOP_ICON_WIDTH + DESKTOP_ICON_MARGIN) + DESKTOP_ICON_MARGIN,
-				i * (DESKTOP_ICON_HEIGHT + DESKTOP_ICON_MARGIN) + DESKTOP_ICON_MARGIN,
-				DESKTOP_ICON_WIDTH,
-				DESKTOP_ICON_HEIGHT,
-				make_icon_comp(type, de.name, strlen(de.name))
-			      );
+			j * (DESKTOP_ICON_WIDTH + DESKTOP_ICON_MARGIN)
+				+ DESKTOP_ICON_MARGIN,
+			i * (DESKTOP_ICON_HEIGHT + DESKTOP_ICON_MARGIN)
+				+ DESKTOP_ICON_MARGIN,
+			DESKTOP_ICON_WIDTH,
+			DESKTOP_ICON_HEIGHT,
+			make_icon_comp(type, de.name, strlen(de.name)));
 
 		i++;
 		if (i >= (MONITOR_HEIGHT - DESKTOP_ICON_MARGIN * i) / DESKTOP_ICON_HEIGHT)
@@ -428,16 +435,6 @@ void init_welcome(void)
 			WELCOME_BUTTON_WIDTH,
 			WELCOME_BUTTON_HEIGHT,
 			test = make_button_comp("OK", 3));
-
-	/*
-	add_components(welcome, TEXT,
-			(welcome->width - get_text_width(WELCOME_MSG_SIZE, welcome_msg)) / 2,
-			(actual_height - WELCOME_MSG_SIZE) / 2,
-			get_text_width(WELCOME_MSG_SIZE, welcome_msg),
-			WELCOME_MSG_SIZE,
-			make_text_comp(welcome_msg, strlen(welcome_msg),
-				WELCOME_MSG_SIZE, 0));
-				*/
 }
 
 void exit_wm(int exit_code)
@@ -557,21 +554,54 @@ void draw_cursor(int x, int y, int color)
 void update_cursor(int x, int y)
 {
 	draw_cursor(x, y, RGB(0, 0, 0));
-	
 }
 
 void click_cursor(int x, int y, int pressed)
 {
-	if (pressed)
-	{
-		draw_cursor(x, y, RGB(0, 255, 0));
-		send_msg_to_coord(x, y, WM_BUTTONDOWN, MAKEPARAM(x, y), 0);
-	}
+	struct win *pw = find_window_in_coord(x, y);
+	struct wincomponent *pcomp = 0;
+	wincomp_t compid;
+
+	// sending the window message
+	if (pw)
+		pcomp = find_component_in_coord(pw, x, y);
+	if (pcomp)
+		printf("id: %d\n", pcomp->id);
+
+	if (pcomp)
+		compid = pcomp->id;
 	else
+		compid = 0;
+
+	if (!pressed)
 	{
-		draw_cursor(x, y, RGB(0, 0, 0));
-		send_msg_to_coord(x, y, WM_BUTTONUP, MAKEPARAM(x, y), 0);
+		switch (check_top_bar_click(pw, x, y))
+		{
+		case 0:
+			send_msg_to_proc(pw->owner, pw->id,
+				WM_BUTTONUP + pressed,
+				MAKEPARAM(x, y), compid);
+			break;
+		case 1:
+			send_msg_to_proc(pw->owner, pw->id,
+				WM_MINIMIZED, MAKEPARAM(x, y), 0);
+			pw->minimized = 1;
+			break;
+		case 2:
+			send_msg_to_proc(pw->owner, pw->id,
+				WM_MAXIMIZED, MAKEPARAM(x, y), 0);
+			pw->maximized = 1 - pw->maximized;
+			break;
+		case 3:
+			send_msg_to_proc(pw->owner, pw->id,
+				WM_CLOSE, MAKEPARAM(x, y), 0);
+			destroy_window(pw);
+			break;
+		default:
+			break;
+		}
 	}
+
 }
 
 unsigned int buf[1280 * 800];
@@ -604,36 +634,25 @@ void invalidate_region(int x, int y, int width, int height)
 
 // receives kernel message and returns it via pointer
 // returns -1 if failed
-int recv_kernel_msg(struct wmmsg* pmsg)
+int recv_kernel_msg(struct winmsg* pmsg)
 {
-	if (recv_msg(pmsg, sizeof(struct wmmsg), TIMEOUT) == -1)
+	if (recv_msg(pmsg, sizeof(struct winmsg), TIMEOUT) == -1)
 		return -1;
 	return 0;
 }
 
-void send_msg_to_coord(int x, int y, int code, int param0, int param1)
+void send_msg_to_proc(int pid, winident_t id, int code, int param0, int param1)
 {
-	struct win *pw = find_window_in_coord(x, y);
+	struct winmsg msg;
 
-	if (!pw)
-		return;
-	send_msg_to_proc(pw->owner, code, param0, param1);
-}
-
-void send_msg_to_proc(int pid, int code, int param0, int param1)
-{
-	struct wmmsg msg;
-
-	msg.event_code = code;
+	msg.ident = id;
+	msg.code = code;
 	msg.param0 = param0;
 	msg.param1 = param1;
 
 	send_msg(pid, &msg, sizeof(msg));
 }
 
-// registers a new window in windows array
-// returns the index of the array when success
-// returns -1 when failed
 struct win *register_window(const char *title, int owner, int x, int y, int width, int height, struct win *parent, int draw_type)
 {
 	struct win *ptr;
@@ -654,30 +673,148 @@ struct win *register_window(const char *title, int owner, int x, int y, int widt
 	ptr->minimized = 0;
 	strcpy(ptr->title, title);
 
+	for (int i = 0; i < MAX_CHILD; i++)
+		ptr->child[i] = 0;
+
 	add_to_top(ptr);
 
 	return ptr;
 }
 
+void destroy_window(struct win *pw)
+{
+	// set childs' parent to destorying window's parent
+	for (int i = 0; i < MAX_CHILD; i++)
+		if (pw->child[i])
+			pw->child[i]->parent = pw->parent;
+
+	// destory wincomponents
+	for (struct wincomponent *pwc = pw->first, *next; pwc; pwc = next)
+	{
+		next = pwc->next;
+		free(pwc);
+	}
+
+	// free from z_list
+	struct z *pz;
+	for (pz = zl.bottom; pz; pz = pz->higher)
+		if (pz->win == pw)
+			break;
+	if (!pz)
+		return;
+	if (pz->lower)
+		pz->lower->higher = pz->higher;
+	if (pz->higher)
+		pz->higher->lower = pz->lower;
+	free(pz);
+
+	// free the sturct win
+	free(pw);
+}
+
+int in_rect(int x, int y, int comp_x, int comp_y, int width, int height)
+{
+	int x_diff, y_diff;
+
+	x_diff = x - comp_x;
+	y_diff = y - comp_y;
+
+	if (x_diff >= 0 && y_diff >= 0
+		&& x_diff <= width
+		&& y_diff <= height)
+		return 1;
+	return 0;
+}
+
 struct win *find_window_in_coord(int x, int y)
 {
 	struct z *pz;
-	int x_diff, y_diff;
+	int win_x, win_y, win_w, win_h;
 
 	for (pz = zl.top; pz; pz = pz->lower)
 	{
 		if (pz->win->minimized)
 			continue;
+		if (pz->win->maximized)
+		{
+			win_x = win_y = 0;
+			win_w = MONITOR_WIDTH;
+			win_h = MONITOR_HEIGHT;
+		}
+		else
+		{
+			win_x = pz->win->x;
+			win_y = pz->win->y;
+			win_w = pz->win->width;
+			win_h = pz->win->height;
+		}
 
-		x_diff = x - pz->win->x;
-		y_diff = y - pz->win->y;
-
-		if (x_diff >= 0 && y_diff >= 0
-			&& x_diff <= pz->win->width
-			&& y_diff <= pz->win->height)
+		if (in_rect(x, y, win_x, win_y, win_w, win_h))
 			return pz->win;
 	}
 	
+	return 0;
+}
+
+struct wincomponent *find_component_in_coord(struct win *pw, int x, int y)
+{
+	struct wincomponent *pwc, *ret = 0;
+	int win_x, win_y;
+
+	if (pw->minimized)
+		return 0;
+	if (pw->maximized)
+		win_x = win_y = 0;
+	else
+	{
+		win_x = pw->x;
+		win_y = pw->y;
+	}
+	if (pw->win_draw_type & BORDER)
+		win_x += BORDER_THICKNESS;
+	if (!(pw->win_draw_type & NO_TOP_BAR))
+		win_y += TOP_BAR_HEIGHT;
+
+	for (pwc = pw->first; pwc; pwc = pwc->next)
+		if (in_rect(x - win_x, y - win_y, pwc->x, pwc->y, pwc->width, pwc->height))
+			ret = pwc;
+
+	return ret;
+}
+
+// returns
+// 0: when no click
+// 1: when minimized clicked
+// 2: when maximized clicked
+// 3: when closed clicked
+int check_top_bar_click(struct win *pw, int x, int y)
+{
+	int win_x, win_y, win_w;
+
+	if (pw->minimized || (pw->win_draw_type & NO_TOP_BAR))
+		return 0;
+	else if (pw->maximized)
+	{
+		win_x = x;
+		win_y = y;
+		win_w = MONITOR_WIDTH;
+	}
+	else
+	{
+		win_x = x - pw->x;
+		win_y = y - pw->y;
+		win_w = pw->width;
+	}
+
+	if (in_rect(win_x, win_y, EXIT_BUTTON_X_OFFSET(win_w), TOP_BAR_BUTTON_Y_OFFSET,
+			TOP_BAR_BUTTON_SIZE, TOP_BAR_BUTTON_SIZE))
+		return 3;
+	if (in_rect(win_x, win_y, MAX_BUTTON_X_OFFSET(win_w), TOP_BAR_BUTTON_Y_OFFSET,
+			TOP_BAR_BUTTON_SIZE, TOP_BAR_BUTTON_SIZE))
+		return 2;
+	if (in_rect(win_x, win_y, MIN_BUTTON_X_OFFSET(win_w), TOP_BAR_BUTTON_Y_OFFSET,
+			TOP_BAR_BUTTON_SIZE, TOP_BAR_BUTTON_SIZE))
+		return 1;
 	return 0;
 }
 
@@ -809,25 +946,25 @@ void render_top_bar(struct win *pw)
 	// bar
 	rect(x, y, width, TOP_BAR_HEIGHT, THEME_COLOR);
 	// exit
-	rect(x + width - TOP_BAR_BUTTON_SIZE + TOP_BAR_BUTTON_MARGIN,
-			y + TOP_BAR_BUTTON_MARGIN,
-			TOP_BAR_BUTTON_SIZE - TOP_BAR_BUTTON_MARGIN * 2,
-			TOP_BAR_BUTTON_SIZE - TOP_BAR_BUTTON_MARGIN * 2,
-			EXIT_BUTTON_COLOR);
+	rect(x + EXIT_BUTTON_X_OFFSET(width),
+		y + TOP_BAR_BUTTON_Y_OFFSET,
+		TOP_BAR_BUTTON_SIZE,
+		TOP_BAR_BUTTON_SIZE,
+		EXIT_BUTTON_COLOR);
 	// maximize
 	if (draw_type & MAXIMIZE_BUTTON)
-		rect(x + width - 2 * TOP_BAR_BUTTON_SIZE + TOP_BAR_BUTTON_MARGIN,
-				y + TOP_BAR_BUTTON_MARGIN,
-				TOP_BAR_BUTTON_SIZE - TOP_BAR_BUTTON_MARGIN * 2,
-				TOP_BAR_BUTTON_SIZE - TOP_BAR_BUTTON_MARGIN * 2,
-				MAX_BUTTON_COLOR);
+		rect(x + MAX_BUTTON_X_OFFSET(width),
+			y + TOP_BAR_BUTTON_Y_OFFSET,
+			TOP_BAR_BUTTON_SIZE,
+			TOP_BAR_BUTTON_SIZE,
+			MAX_BUTTON_COLOR);
 	// minimize
 	if (draw_type & MINIMIZE_BUTTON)
-		rect(x + width - 3 * TOP_BAR_BUTTON_SIZE + TOP_BAR_BUTTON_MARGIN,
-				y + TOP_BAR_BUTTON_MARGIN,
-				TOP_BAR_BUTTON_SIZE - TOP_BAR_BUTTON_MARGIN * 2,
-				TOP_BAR_BUTTON_SIZE - TOP_BAR_BUTTON_MARGIN * 2,
-				MIN_BUTTON_COLOR);
+		rect(x + MIN_BUTTON_X_OFFSET(width),
+			y + TOP_BAR_BUTTON_Y_OFFSET,
+			TOP_BAR_BUTTON_SIZE,
+			TOP_BAR_BUTTON_SIZE,
+			MIN_BUTTON_COLOR);
 
 	// title
 	int text_width = get_text_width(TOP_BAR_TEXT_SIZE, pw->title);

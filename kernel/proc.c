@@ -760,14 +760,14 @@ unregister_wm(void)
 void
 send_msg_to_wm(int type, int param0, int param1)
 {
-	struct wmmsg msg;
+	struct winmsg msg;
 
 	if (!xvxwm)
 		return;
 
-	msg.event_code = type;
+	msg.code = type;
 	msg.param0 = param0;
 	msg.param1 = param1;
 
-	send_msg(xvxwm, (char*)&msg, sizeof(struct wmmsg), 0);
+	send_msg(xvxwm, (char*)&msg, sizeof(struct winmsg), 0);
 }

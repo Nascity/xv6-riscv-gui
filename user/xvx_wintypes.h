@@ -27,7 +27,7 @@ struct win
 	int height;
 	
 	// parent - null if shell - and children
-#define MAX_CHILD	50
+#define MAX_CHILD	10
 	struct win *parent;
 	struct win *child[MAX_CHILD];
 	int num_children;

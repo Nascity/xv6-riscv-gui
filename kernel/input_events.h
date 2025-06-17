@@ -387,11 +387,16 @@ struct virtio_input_event {
 #define Y(param)		((param) & 0xFFFF)
 #define MAKEPARAM(x, y)		((((x) & 0xFFFF) << 16) + ((y) & 0xFFFF))
 
-struct wmmsg
+typedef int code_t;
+
+struct winmsg
 {
-	int event_code;
+	int ident;
+	code_t code;
 	int param0;
 	int param1;
+#define MAX_EXTRA_SIZE	(MSG_SZ - (sizeof(struct winmsg) - 1))
+	char extra[1];
 };
 
 #endif
