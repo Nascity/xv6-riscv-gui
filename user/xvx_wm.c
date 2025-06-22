@@ -3,9 +3,9 @@
 #include "kernel/fs.h"
 #include "kernel/stat.h"
 #include "user/user.h"
-#include "xvx_wintypes.h"
-#include "xvx_wincomp.h"
-#include "xvx_winmsg.h"
+#include "user/xvx_wintypes.h"
+#include "user/xvx_wincomp.h"
+#include "user/xvx_winmsg.h"
 
 struct z_list zl;
 winident_t id_track = 1;
@@ -36,6 +36,8 @@ void destroy_window(struct win *pw);
 struct win *find_window_in_coord(int x, int y);
 struct wincomponent *find_component_in_coord(struct win *pw, int x, int y);
 int check_top_bar_click(struct win *pw, int x, int y);
+
+void register_window_from_msg(struct winmsg *pmsg);
 
 // shell operations
 void shell_execute(int index);
@@ -289,35 +291,41 @@ int main(int argc, char *argv[])
 
 	while (1)
 	{
-		struct winmsg msg;
+		char buf_msg[128];
+		struct winmsg *msg = (struct winmsg*)buf_msg;
 
-		if (recv_kernel_msg(&msg) == -1)
+		if (recv_kernel_msg(msg) == -1)
 			continue;
 
-		switch (msg.code)
+		switch (msg->code)
 		{
 		case EV_REL:
-			update_cursor(X(msg.param0), Y(msg.param0));
+			update_cursor(X(msg->param0), Y(msg->param0));
 			break;
 		case EV_KEY:
-			click_cursor(X(msg.param0), Y(msg.param0), msg.param1);
+			click_cursor(X(msg->param0), Y(msg->param0), msg->param1);
 			render();
-			if (msg.param1)
-				draw_cursor(X(msg.param0), Y(msg.param0), RGB(0, 255, 0));
+			if (msg->param1)
+				draw_cursor(X(msg->param0), Y(msg->param0), RGB(0, 255, 0));
 			else
-				draw_cursor(X(msg.param0), Y(msg.param0), RGB(0, 0, 0));
+				draw_cursor(X(msg->param0), Y(msg->param0), RGB(0, 0, 0));
 			break;
 		case WM_BUTTONUP:
-			if (welcome_button && msg.param1 == welcome_button->id)
+			if (welcome_button && msg->param1 == welcome_button->id)
 			{
 				destroy_window(welcome);
 				welcome_button = 0;
 				welcome = 0;
 			}
-			else if (msg.param1 > 0 && msg.param1 <= desktop_icon_inclusive)
-				shell_execute(msg.param1);
+			else if (msg->param1 > 0 && msg->param1 <= desktop_icon_inclusive)
+				shell_execute(msg->param1);
 			render();
-			update_cursor(X(msg.param0), Y(msg.param0));
+			update_cursor(X(msg->param0), Y(msg->param0));
+			break;
+		case WM_REGISTER:
+			register_window_from_msg(msg);
+			break;
+		default:
 			break;
 		}
 	}
@@ -661,7 +669,7 @@ void invalidate_region(int x, int y, int width, int height)
 // returns -1 if failed
 int recv_kernel_msg(struct winmsg* pmsg)
 {
-	if (recv_msg(pmsg, sizeof(struct winmsg), TIMEOUT) == -1)
+	if (recv_msg(pmsg, 128, TIMEOUT) == -1)
 		return -1;
 	return 0;
 }
@@ -730,6 +738,10 @@ void destroy_window(struct win *pw)
 			break;
 	if (!pz)
 		return;
+	if (zl.bottom == pz)
+		zl.bottom = pz->higher;
+	if (zl.top == pz)
+		zl.top = pz->lower;
 	if (pz->lower)
 		pz->lower->higher = pz->higher;
 	if (pz->higher)
@@ -846,6 +858,24 @@ int check_top_bar_click(struct win *pw, int x, int y)
 	return 0;
 }
 
+void register_window_from_msg(struct winmsg *pmsg)
+{
+	struct winmsg_register *pwr = (struct winmsg_register*)pmsg->extra;
+	struct win *newwin;
+
+	newwin = register_window(pwr->title, pwr->pid,
+			X(pmsg->param0), Y(pmsg->param0),
+			X(pmsg->param1), Y(pmsg->param1),
+			shell, pwr->draw_type);
+	if (newwin)
+		send_msg_to_proc(pwr->pid, newwin->id, WM_REGISTERACK, newwin->id, 0);
+	else
+	{
+		send_msg_to_proc(pwr->pid, 0, WM_REGISTERACK, NO_WINIDENT, 0);
+		printf("Failed to register!\n");
+	}
+}
+
 void shell_execute(int index)
 {
 	int fd = open("/", 0);
@@ -881,7 +911,10 @@ void shell_execute(int index)
 		printf("shell execute 2 failed!\n");	
 	else if (pid == 0)
 	{
-		char *argv[] = { 0 };
+		char checksum[] = GRAPHICAL_ARG;
+		char *argv[] = { checksum , 0 };
+
+		checksum[1] += shell->owner;
 
 		if (exec(de.name, argv))
 			printf("failed to shell execute!\n");
@@ -1053,6 +1086,8 @@ void render_window(struct win *pw)
 {
 	int x, y, width, height;
 
+	if (pw->minimized)
+		return;
 	if (pw->maximized)
 	{
 		x = y = 0;
@@ -1158,8 +1193,11 @@ void render(void)
 	struct z *pz;
 
 	for (pz = zl.bottom; pz; pz = pz->higher)
+		printf("%p: %s\n", pz->win, pz->win->title);
+
+	for (pz = zl.bottom; pz; pz = pz->higher)
 	{
-		if (pz->win->minimized)
+		if (!pz->win || !((uint64)pz->win & 0x7FFF0000))
 			continue;
 		render_window(pz->win);
 		render_components(pz->win);

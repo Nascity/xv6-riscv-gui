@@ -1,6 +1,8 @@
 #ifndef __WINDEFS_H__
 #define __WINDEFS_H__
 
+#define GRAPHICAL_ARG	"G\x10"
+
 #define MONITOR_WIDTH	1280
 #define MONITOR_HEIGHT	800
 

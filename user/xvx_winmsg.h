@@ -18,7 +18,22 @@
 // param0: reserved
 // param1: reserved
 #define WM_CLOSE	(WM_BASE + 4)
+// param0: upper 16bits are x, lower 16bits are y coordinates
+// param1: upper 16bits are width, lower 16bits are height
+// extra: struct winmsg_register
+#define WM_REGISTER	(WM_BASE + 5)
+// param0: winident (-1 if failed)
+// param1: reserved
+#define WM_REGISTERACK	(WM_BASE + 6)
 
-
+/*
+ * structs
+ */
+struct winmsg_register
+{
+	int pid;
+	int draw_type;
+	char title[32];
+};
 
 #endif

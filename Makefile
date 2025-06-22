@@ -144,7 +144,8 @@ UPROGS=\
 	$U/_zombie\
 	$U/_gtest.exe\
 	$U/_sender\
-	$U/_xvx_wm
+	$U/_xvx_wm\
+	$U/_devs.exe
 
 fs.img: mkfs/mkfs README.md dir.bmp exe.bmp img.bmp $(UPROGS)
 	mkfs/mkfs fs.img README.md dir.bmp		\
