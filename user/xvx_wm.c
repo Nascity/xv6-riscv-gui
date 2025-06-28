@@ -291,7 +291,7 @@ int main(int argc, char *argv[])
 
 	while (1)
 	{
-		char buf_msg[128];
+		char buf_msg[MSG_SZ];
 		struct winmsg *msg = (struct winmsg*)buf_msg;
 
 		if (recv_kernel_msg(msg) == -1)
@@ -515,7 +515,10 @@ void chr(int x, int y, int pt, char ch, int color)
 			int here_x = RATIO(j, pt);
 			int here_y = RATIO(i, pt);
 
-			if (alpha[here_y][here_x] == 'o')
+			if (alpha[here_y][here_x] == 'o'
+				&& here_y >= 0 && here_y <= ALPHABET_BASE_SIZE
+				&& here_x >= 0 && here_y <= ALPHABET_BASE_SIZE
+				&& x + j >= 0 && y + i >= 0)
 				screen_buffer[y + i][x + j] = color;
 		}
 	}
@@ -869,7 +872,12 @@ void register_window_from_msg(struct winmsg *pmsg)
 	struct winmsg_register *pwr = (struct winmsg_register*)pmsg->extra;
 	struct win *newwin;
 
-	printf("grand title: %s\n", pwr->title);
+	printf("buf_msg at %p\n", pmsg);
+	//DEBUG
+	printf("title: ");
+	for (int i = 0; i < 20; i++)
+		printf("%x ", pwr->title[i]);
+	printf("\n");
 
 	newwin = register_window(pwr->title, pwr->pid,
 			X(pmsg->param0), Y(pmsg->param0),

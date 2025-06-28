@@ -45,6 +45,7 @@ int send_msg(struct proc *p, char *kernel_buf, int size, int isalloced)
 	}
 	// move kernel memory to queue
 	struct msg *pm = &((struct msg*)p->msg_queue)[p->writeptr];
+	memset(pm->msg, 0, size);
 	memmove(pm->msg, kernel_buf, size);
 	pm->size = size;
 

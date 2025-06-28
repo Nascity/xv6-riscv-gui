@@ -31,7 +31,6 @@ int register_window(int pid)
 			msg->ident, msg->code, msg->param0,
 			msg->param1, pwr->pid, pwr->draw_type,
 			pwr->title);	// DEBUG
-	printf("at: %p\n", buf_msg);
 
 	send_msg(pid, buf_msg, 128);
 

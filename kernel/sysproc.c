@@ -198,7 +198,7 @@ sys_recv_msg(void)
 
 	if ((long long)pm < 0)
 		return -1;
-	if (copyout(p->pagetable, user_buf, (char*)pm->msg, pm->size))
+	if (copyout(p->pagetable, user_buf, (char*)pm->msg, size))
 		panic("recv_msg - copyout failed");
 	for (int i = 0; i < MSG_SZ; i++)
 		((char*)pm)[i] = 0xCF;
