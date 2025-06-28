@@ -13,24 +13,38 @@ int register_window(int pid)
 	struct winmsg_register *pwr = (struct winmsg_register*)msg->extra;
 	int i;
 
+	for (i = 0; i < 128; i++)
+		buf_msg[i] = 0x12 + i;
+
 	msg->ident = 0;
 	msg->code = WM_REGISTER;
 	msg->param0 = MAKEPARAM(200, 200);
 	msg->param1 = MAKEPARAM(500, 500);
+	
 	pwr->pid = getpid();
 	pwr->draw_type = DEFAULT_WINDOW;
 	for (i = 0; title[i]; i++)
 		pwr->title[i] = title[i];
 	pwr->title[i] = 0;
+	
+	printf("child: %x %x %x %x %x %x %s\n",
+			msg->ident, msg->code, msg->param0,
+			msg->param1, pwr->pid, pwr->draw_type,
+			pwr->title);	// DEBUG
+	printf("at: %p\n", buf_msg);
 
 	send_msg(pid, buf_msg, 128);
 
-	if (recv_msg(msg, 128, -1) == -1)
-		return -1;
-	if (msg->code != WM_REGISTERACK)
-		return -1;
-	if (msg->param0 == -1)
-		return -1;
+	while (recv_msg(msg, 128, 1) == -1)
+	{
+		printf("child here!\n");
+		if (msg->code != WM_REGISTERACK)
+			return -1;
+		else if (msg->param0 == -1)
+			return -1;
+		else
+			break;
+	}
 
 	winid = msg->param0;
 	return 0;

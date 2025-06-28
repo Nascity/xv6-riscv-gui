@@ -13,7 +13,7 @@ struct superblock;
 // but it has to be done
 #define MSG_SZ	128
 #define MAX_MSG (MSG_SZ - sizeof(uint64))
-#define Q_SZ	(PGSIZE / MAX_MSG)
+#define Q_SZ	(PGSIZE / MSG_SZ)
 
 struct msg
 {

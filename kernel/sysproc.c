@@ -176,7 +176,7 @@ sys_send_msg(void)
 	kernel_buf = (char*)kalloc();
 	if (!kernel_buf)
 		panic("send_msg - kernel_buf alloc failed");
-	if (copyin(p->pagetable, kernel_buf, user_buf, Q_SZ))
+	if (copyin(myproc()->pagetable, kernel_buf, user_buf, Q_SZ))
 		panic("send_msg - copyin failed");
 
 	return send_msg(p, kernel_buf, size, 1);
@@ -199,11 +199,15 @@ sys_recv_msg(void)
 	if ((long long)pm < 0)
 		return -1;
 	if (copyout(p->pagetable, user_buf, (char*)pm->msg, pm->size))
-		return -1;
-		//panic("recv_msg - copyout failed");	DO NOT DELETE THIS LINE
-		//					FOR SOME REASON, THIS
-		//					LINE MAKES THE CODE WORK
+		panic("recv_msg - copyout failed");
+	for (int i = 0; i < MSG_SZ; i++)
+		((char*)pm)[i] = 0xCF;
 
+	// kinda feel dangerous to release here...
+	// hope nothing bad happens
+	release(&p->lock);
+	release(&p->read_lock2);
+	release(&p->read_lock);
 	return 0;
 }
 

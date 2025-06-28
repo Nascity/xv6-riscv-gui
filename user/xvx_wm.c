@@ -297,8 +297,11 @@ int main(int argc, char *argv[])
 		if (recv_kernel_msg(msg) == -1)
 			continue;
 
+		// if (msg->code != EV_REL) printf("%d\n", msg->code); //DEBUG
 		switch (msg->code)
 		{
+		case 0:
+			break;
 		case EV_REL:
 			update_cursor(X(msg->param0), Y(msg->param0));
 			break;
@@ -324,6 +327,7 @@ int main(int argc, char *argv[])
 			break;
 		case WM_REGISTER:
 			register_window_from_msg(msg);
+			render();
 			break;
 		default:
 			break;
@@ -678,6 +682,8 @@ void send_msg_to_proc(int pid, winident_t id, int code, int param0, int param1)
 {
 	struct winmsg msg;
 
+	memset(&msg, 0xBF, sizeof(msg));
+
 	msg.ident = id;
 	msg.code = code;
 	msg.param0 = param0;
@@ -862,6 +868,8 @@ void register_window_from_msg(struct winmsg *pmsg)
 {
 	struct winmsg_register *pwr = (struct winmsg_register*)pmsg->extra;
 	struct win *newwin;
+
+	printf("grand title: %s\n", pwr->title);
 
 	newwin = register_window(pwr->title, pwr->pid,
 			X(pmsg->param0), Y(pmsg->param0),
@@ -1192,9 +1200,11 @@ void render(void)
 {
 	struct z *pz;
 
+	/*
 	for (pz = zl.bottom; pz; pz = pz->higher)
-		printf("%p: %s\n", pz->win, pz->win->title);
-
+		printf("%p %s\n", pz->win, pz->win->title);	// DEBUG
+	*/
+	
 	for (pz = zl.bottom; pz; pz = pz->higher)
 	{
 		if (!pz->win || !((uint64)pz->win & 0x7FFF0000))

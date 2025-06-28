@@ -10,10 +10,6 @@
 #include "spinlock.h"
 #include "proc.h"
 
-#define MSG_SZ	128
-#define MAX_MSG (MSG_SZ - sizeof(uint64))
-#define Q_SZ	(PGSIZE / MAX_MSG)
-
 // error codes
 #define MSG_Q_OK		0
 #define MSG_Q_PROC_NOT_FOUND	-1
@@ -82,11 +78,6 @@ struct msg *recv_msg(struct proc *p, char *kernel_buf, int size, int timeout)
 	p->readptr = (p->readptr + 1) % Q_SZ;
 	p->justread = 1;
 
-	// kinda feel dangerous to release here...
-	// hope nothing bad happens
-	release(&p->lock);
-	release(&p->read_lock2);
-	release(&p->read_lock);
 	return pm;
 }
 

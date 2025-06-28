@@ -395,6 +395,7 @@ struct winmsg
 	code_t code;
 	int param0;
 	int param1;
+#define MSG_SZ		128
 #define MAX_EXTRA_SIZE	(MSG_SZ - (sizeof(struct winmsg) - 1))
 	char extra[1];
 };

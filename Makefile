@@ -126,6 +126,7 @@ mkfs/mkfs: mkfs/mkfs.c $K/fs.h $K/param.h
 .PRECIOUS: %.o
 
 UPROGS=\
+	$U/_gdevs.exe\
 	$U/_cat\
 	$U/_echo\
 	$U/_forktest\
@@ -144,8 +145,7 @@ UPROGS=\
 	$U/_zombie\
 	$U/_gtest.exe\
 	$U/_sender\
-	$U/_xvx_wm\
-	$U/_devs.exe
+	$U/_xvx_wm
 
 fs.img: mkfs/mkfs README.md dir.bmp exe.bmp img.bmp $(UPROGS)
 	mkfs/mkfs fs.img README.md dir.bmp		\
