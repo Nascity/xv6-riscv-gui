@@ -47,7 +47,9 @@ void *make_fill_comp(int color);
 void *make_button_comp(char *text, int len);
 void *make_icon_comp(int type, char *text, int len);
 void *make_text_comp(char *text, int len, int pt, int color);
-void add_components(struct win *pw, int comptype, int rel_x, int rel_y, int width, int height, void *info);
+void *make_bitmap_comp(char *path, int width, int height);
+int add_components(struct win *pw, int comptype, int rel_x, int rel_y, int width, int height, void *info);
+void add_components_from_msg(struct winmsg *pmsg);
 
 // draw operation
 void rect(int x, int y, int width, int height, int rgb);
@@ -85,6 +87,7 @@ char *cursor[] = {
 #define ICON_HEIGHT	40
 #define BMP_HEADER_SIZE	138
 void load_bitmaps(void);
+void bits_from_1d(int x, int y, int width, int height, int *bitmap);
 void bits_from_2d(int x, int y, int width, int height, int (*bitmap)[]);
 
 int icons[ICON_COUNT][ICON_HEIGHT][ICON_WIDTH];
@@ -329,6 +332,10 @@ int main(int argc, char *argv[])
 			register_window_from_msg(msg);
 			render();
 			break;
+		case WM_REGCOMP:
+			add_components_from_msg(msg);
+			render();
+			break;
 		default:
 			break;
 		}
@@ -544,6 +551,20 @@ int get_text_width(int pt, char *text)
 	return j;
 }
 
+void bits_from_1d(int x, int y, int width, int height, int *bitmap)
+{
+	int i, j;
+
+	for (i = y; i < y + height && i < MONITOR_HEIGHT; i++)
+	{
+		for (j = x; j < x + width && j < MONITOR_WIDTH; j++)
+		{
+			if (i > 0 && j > 0)
+				screen_buffer[i][j] = bitmap[(i - y) * width + (j - x)];
+		}
+	}
+}
+
 void bits_from_2d(int x, int y, int width, int height, int (*bitmap)[ICON_WIDTH])
 {
 	int i, j;
@@ -684,8 +705,6 @@ int recv_kernel_msg(struct winmsg* pmsg)
 void send_msg_to_proc(int pid, winident_t id, int code, int param0, int param1)
 {
 	struct winmsg msg;
-
-	memset(&msg, 0xBF, sizeof(msg));
 
 	msg.ident = id;
 	msg.code = code;
@@ -982,8 +1001,62 @@ void *make_text_comp(char *text, int len, int pt, int color)
 	return (void*)ptc;
 }
 
-void add_components(struct win *pw, int comptype, int rel_x, int rel_y, int width, int height, void *info)
+void *make_bitmap_comp(char *path, int width, int height)
 {
+	struct bitmap_component *pbc = malloc(sizeof(struct bitmap_component));
+	int x, y;
+	int fd = -1;
+	int count;
+	char buffer[BMP_HEADER_SIZE];
+	char color_buf[3];
+
+	pbc->bitmap = malloc(512 * 512 * sizeof(int));
+	if (!pbc->bitmap)
+		goto fail;
+
+	fd = open(path, 0);
+	if (fd < 0)
+		goto fail;
+
+	read(fd, buffer, 0x0D);
+	int size = (int)buffer[0x0A];
+	read(fd, buffer, size - 0x0D);
+
+	for (y = height - 1, count = 0; y >= 0; y--, count = 0)
+	{
+		for (x = 0; x < width; x++, count += 3)
+		{
+			// works for some reason
+			color_buf[0] = 0;
+			color_buf[1] = 0;
+			color_buf[2] = 0;
+
+			read(fd, color_buf, 3);
+
+			pbc->bitmap[y * width + x] = RGB(
+					color_buf[2],
+					color_buf[1],
+					color_buf[0]
+			);
+		}
+		read(fd, buffer, 4 - (count / 3) % 4);
+	}
+	close(fd);
+	return (void*)pbc;
+
+fail:
+	if (fd >= 0)
+		close(fd);
+	if (pbc)
+		free(pbc);
+	return 0;
+}
+
+int add_components(struct win *pw, int comptype, int rel_x, int rel_y, int width, int height, void *info)
+{
+	if (!info)
+		return -1;
+
 	struct wincomponent *pwc = malloc(sizeof(struct wincomponent));
 
 	pwc->id = comp_id_track++;
@@ -997,6 +1070,69 @@ void add_components(struct win *pw, int comptype, int rel_x, int rel_y, int widt
 	pwc->next = pw->first;
 
 	pw->first = pwc;
+
+	return pwc->id;
+}
+
+void add_components_from_msg(struct winmsg *pmsg)
+{
+	struct winmsg_regcomp *pwr = (struct winmsg_regcomp*)pmsg->extra;
+	struct z *pz;
+	void *comp;
+
+	for (pz = zl.top; pz; pz = pz->lower)
+	{
+		if (!pz->win || !((uint64)pz->win & 0x7FFF0000))
+			continue;
+		if (pwr->pid == pz->win->owner)
+			break;
+	}
+	if (!pz)
+		return;
+
+	switch (pwr->comp_type)
+	{
+	case FILL:
+		comp = make_fill_comp(pwr->u.fill_color);
+		break;
+	case BUTTON:
+		printf("if error occurs, it would likely be here - 1\n");	// DEBUG
+		printf("props: %s %d\n", pwr->u.text.text, strlen(pwr->u.text.text));
+		comp = make_button_comp(pwr->u.text.text, strlen(pwr->u.text.text));
+		break;
+	case ICON:
+		comp = make_icon_comp(
+			pwr->u.text.icon_index,
+			pwr->u.text.text,
+			strlen(pwr->u.text.text)
+		);
+		break;
+	case TEXT:
+		printf("if error occurs, it would likely be here - 2\n");	// DEBUG
+		printf("props: %s %d %d %x\n",
+			pwr->u.text.text, strlen(pwr->u.text.text),
+			pwr->u.text.pt, pwr->u.text.color
+		);
+		comp = make_text_comp(
+			pwr->u.text.text, strlen(pwr->u.text.text),
+			pwr->u.text.pt, pwr->u.text.color
+		);
+		break;
+	case BITMAP:
+		comp = make_bitmap_comp(pwr->u.text.text, X(pmsg->param1), Y(pmsg->param1));
+		break;
+	default:
+		goto fail_pz_found;
+	}
+	int id = add_components(pz->win, pwr->comp_type,
+		X(pmsg->param0), Y(pmsg->param0),
+		X(pmsg->param1), Y(pmsg->param1), comp
+	);
+	send_msg_to_proc(pwr->pid, pz->win->id, WM_REGCOMPACK, id, 0);
+	return;
+
+fail_pz_found:
+	send_msg_to_proc(pwr->pid, pz->win->id, WM_REGCOMPACK, -1, 0);
 }
 
 void add_to_top(struct win *pw)
@@ -1191,6 +1327,13 @@ void render_components(struct win *pw)
 				((struct text_component*)ptr->comp)->text,
 				((struct text_component*)ptr->comp)->color);
 			break;
+		case BITMAP:
+			// DEBUG
+			// CHECK HERE
+			bits_from_1d(x, y, ptr->width, ptr->height,
+				((struct bitmap_component*)ptr->comp)->bitmap
+			);
+			break;
 		default:
 			break;
 		}
@@ -1201,11 +1344,6 @@ void render(void)
 {
 	struct z *pz;
 
-	/*
-	for (pz = zl.bottom; pz; pz = pz->higher)
-		printf("%p %s\n", pz->win, pz->win->title);	// DEBUG
-	*/
-	
 	for (pz = zl.bottom; pz; pz = pz->higher)
 	{
 		if (!pz->win || !((uint64)pz->win & 0x7FFF0000))

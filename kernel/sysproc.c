@@ -176,7 +176,7 @@ sys_send_msg(void)
 	kernel_buf = (char*)kalloc();
 	if (!kernel_buf)
 		panic("send_msg - kernel_buf alloc failed");
-	if (copyin(myproc()->pagetable, kernel_buf, user_buf, Q_SZ))
+	if (copyin(myproc()->pagetable, kernel_buf, user_buf, size))
 		panic("send_msg - copyin failed");
 
 	return send_msg(p, kernel_buf, size, 1);

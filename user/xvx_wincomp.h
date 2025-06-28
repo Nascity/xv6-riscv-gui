@@ -10,6 +10,7 @@ struct wincomponent
 #define BUTTON	1
 #define ICON	2
 #define TEXT	3
+#define BITMAP	4
 	int comp_type;
 
 	// position relative to the parent
@@ -57,6 +58,11 @@ struct text_component
 	int pt;
 	int color;
 	char text[1];
+};
+
+struct bitmap_component
+{
+	int *bitmap;
 };
 
 #endif
