@@ -872,13 +872,6 @@ void register_window_from_msg(struct winmsg *pmsg)
 	struct winmsg_register *pwr = (struct winmsg_register*)pmsg->extra;
 	struct win *newwin;
 
-	printf("buf_msg at %p\n", pmsg);
-	//DEBUG
-	printf("title: ");
-	for (int i = 0; i < 20; i++)
-		printf("%x ", pwr->title[i]);
-	printf("\n");
-
 	newwin = register_window(pwr->title, pwr->pid,
 			X(pmsg->param0), Y(pmsg->param0),
 			X(pmsg->param1), Y(pmsg->param1),

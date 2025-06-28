@@ -7,7 +7,7 @@ int winid;
 
 int register_window(int pid)
 {
-	char *title = "Developers";
+	char *title = "Devs";
 	char buf_msg[128];
 	struct winmsg *msg = (struct winmsg*)buf_msg;
 	struct winmsg_register *pwr = (struct winmsg_register*)msg->extra;
@@ -34,7 +34,7 @@ int register_window(int pid)
 
 	send_msg(pid, buf_msg, 128);
 
-	while (recv_msg(msg, 128, 1) == -1)
+	while (recv_msg(msg, 128, -1))
 	{
 		printf("child here!\n");
 		if (msg->code != WM_REGISTERACK)
