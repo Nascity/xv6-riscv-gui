@@ -273,3 +273,18 @@ Finally I made the text appear on the screen.
 I have to go through errors that have been accumulated from all these times of programming.
 
 Anyways, we see letters, now!
+
+# 9th day of dev (Jun 28, approx. 5h lost with agonizing "25855")
+![wth](https://github.com/user-attachments/assets/696d2725-6e44-41fe-9a68-e1f17cba42f8)
+
+IT WAS DIFFICULT.
+
+The argument for `copyin` function in `sys_send_msg` function had to have `myproc()->pagetable` as its first argument.
+
+Rest of the time, it was reading the memory of the receiver.
+
+It mad the integer 25855 to appear constantly in the dump.
+
+Anyways, I solved it.
+
+Too many hours was lost.
