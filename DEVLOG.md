@@ -288,3 +288,14 @@ It mad the integer 25855 to appear constantly in the dump.
 Anyways, I solved it.
 
 Too many hours was lost.
+
+# 10th day of dev (Jun 30, approx. 3h used worthily, finally)
+![image](https://github.com/user-attachments/assets/f2e2fc1e-71f4-4489-b379-ca4f1af4c23a)
+
+Finally, a day without critical bug.
+
+I implemented "Devs" window.
+
+I did an all-nighter today, so I'll end the devlog here.
+
+I should get some sleep.
