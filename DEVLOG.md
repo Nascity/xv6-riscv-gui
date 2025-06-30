@@ -299,3 +299,9 @@ I implemented "Devs" window.
 I did an all-nighter today, so I'll end the devlog here.
 
 I should get some sleep.
+
+![image](https://github.com/user-attachments/assets/97f6c266-2af7-4008-8e73-f537b60a675f)
+
+Oh, btw, the team member Soojin Hwang made this awesome lookin' logo!
+
+Shoutout to him!
