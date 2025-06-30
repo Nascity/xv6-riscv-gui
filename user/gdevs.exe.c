@@ -9,6 +9,13 @@
 #define WINDOW_WIDTH	1000
 #define WINDOW_HEIGHT	500
 
+#define IMAGE_WIDTH	167
+#define IMAGE_HEIGHT	256
+
+#define PADDING		10
+#define PT		20
+#define TEXT_PADDING	5
+
 #define WINDOW_X	((MONITOR_WIDTH - WINDOW_WIDTH) / 2)
 #define WINDOW_Y	((MONITOR_HEIGHT - WINDOW_HEIGHT) / 2)
 
@@ -19,7 +26,7 @@ int wait_ack(struct winmsg *msg)
 {
 	while (recv_msg(msg, 128, -1))
 	{
-		printf("child here!\n");
+		printf("child here!\n");	// DEBUG
 		if (msg->code != WM_REGISTERACK)
 			return -1;
 		else if (msg->param0 == -1)
@@ -57,32 +64,90 @@ int register_window()
 	return 0;
 }
 
-int init(void)
+int init_bitmaps(void)
 {
 	char buf_msg[128];
 	struct winmsg *msg = (struct winmsg*)buf_msg;
 	struct winmsg_regcomp *pwr = (struct winmsg_regcomp*)msg->extra;
-	char *path = "/img.bmp";
-	int i;
+	char *path[3] = { "/shin.bmp", "/joo.bmp", "/hwang.bmp" };
+	int i, j;
+	int x;
 
-	// register bitmaps
-	msg->ident = winid;
-	msg->code = WM_REGCOMP;
-	msg->param0 = MAKEPARAM(10, 10);
-	msg->param1 = MAKEPARAM(50, 40);
+	for (i = 0, x = PADDING; i < 3; i++, x += IMAGE_WIDTH + PADDING)
+	{
+		// register bitmaps
+		msg->ident = winid;
+		msg->code = WM_REGCOMP;
+		msg->param0 = MAKEPARAM(x, PADDING);
+		msg->param1 = MAKEPARAM(IMAGE_WIDTH, IMAGE_HEIGHT);
 
-	pwr->pid = getpid();
-	pwr->comp_type = BITMAP;
-	for (i = 0; path[i]; i++)
-		pwr->u.text.text[i] = path[i];
-	pwr->u.text.text[i] = 0;
+		pwr->pid = getpid();
+		pwr->comp_type = BITMAP;
+		for (j = 0; path[i][j]; j++)
+			pwr->u.text.text[j] = path[i][j];
+		pwr->u.text.text[j] = 0;
 
-	send_msg(wmpid, buf_msg, 128);
-	if (wait_ack(msg))
-		return -1;
+		send_msg(wmpid, buf_msg, 128);
+		if (wait_ack(msg))
+			return -1;
+	}
 	// DO SOMETHING	DEBUG!!
 	return 0;
 }
+
+int init_texts(void)
+{
+	char buf_msg[128];
+	struct winmsg *msg = (struct winmsg*)buf_msg;
+	struct winmsg_regcomp *pwr = (struct winmsg_regcomp*)msg->extra;
+
+	char *surname[3] = { "SHIN", "JOO", "HWANG" };
+	char *name[3] = { "SEUNGRI", "HYEONWOO", "SOOJIN" };
+
+	int i, j;
+	int x;
+
+	for (i = 0, x = PADDING; i < 3; i++, x += IMAGE_WIDTH + PADDING)
+	{
+		// surname
+		msg->ident = winid;
+		msg->code = WM_REGCOMP;
+		msg->param0 = MAKEPARAM(x, PADDING + IMAGE_HEIGHT + TEXT_PADDING);
+		msg->param1 = 0;
+
+		pwr->pid = getpid();
+		pwr->comp_type = TEXT;
+		pwr->u.text.pt = PT;
+		pwr->u.text.color = GRAY(0);
+		for (j = 0; surname[i][j]; j++)
+			pwr->u.text.text[j] = surname[i][j];
+		pwr->u.text.text[j] = 0;
+
+		send_msg(wmpid, buf_msg, 128);
+		if (wait_ack(msg))
+			return -1;
+
+		// name
+		msg->ident = winid;
+		msg->code = WM_REGCOMP;
+		msg->param0 = MAKEPARAM(x, PADDING + IMAGE_HEIGHT + TEXT_PADDING + PT + TEXT_PADDING);
+		msg->param1 = 0;
+
+		pwr->pid = getpid();
+		pwr->comp_type = TEXT;
+		pwr->u.text.pt = PT;
+		pwr->u.text.color = GRAY(0);
+		for (j = 0; name[i][j]; j++)
+			pwr->u.text.text[j] = name[i][j];
+		pwr->u.text.text[j] = 0;
+
+		send_msg(wmpid, buf_msg, 128);
+		if (wait_ack(msg))
+			return -1;
+	}
+
+	return 0;
+}	
 
 int main(int argc, char *argv[])
 {
@@ -95,8 +160,10 @@ int main(int argc, char *argv[])
 	wmpid = argv[0][1] - '\x10';
 	if (register_window())
 		printf("Failed to register window.\n");
-	else if (init())
-		printf("Failed to register components.\n");
+	else if (init_bitmaps())
+		printf("Failed to register bitmaps.\n");
+	else if (init_texts())
+		printf("Failed to register texts.\n");
 
 	// message loop
 	while (1)

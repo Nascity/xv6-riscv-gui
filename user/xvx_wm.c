@@ -92,10 +92,12 @@ void bits_from_2d(int x, int y, int width, int height, int (*bitmap)[]);
 
 int icons[ICON_COUNT][ICON_HEIGHT][ICON_WIDTH];
 const char *paths[ICON_COUNT] = {
-	"/exe.bmp",
-	"/img.bmp",
-	"/dir.bmp",
-	0
+	"/exe.bmp",	// 0
+	"/img.bmp",	// 1
+	"/dir.bmp",	// 2
+	"/file.bmp",	// 3
+	"/file.bmp",	// 4
+	"/dev.bmp",	// 5
 };
 
 // text
@@ -424,6 +426,9 @@ void init_wm(void)
 		case T_FILE:
 			type = ICON_ETC;
 			break;
+		case T_DEVICE:
+			type = ICON_DEV;
+			break;
 		case T_DIR:
 			type = ICON_DIR;
 			break;
@@ -431,7 +436,7 @@ void init_wm(void)
 		if (is_ext(de.name, "bmp"))
 			type = ICON_BMP;
 		else if (is_ext(de.name, "txt") || is_ext(de.name, "md"))
-			type = ICON_ETC;
+			type = ICON_TXT;
 		else if (is_ext(de.name, "exe"))
 			type = ICON_EXE;
 
@@ -755,6 +760,8 @@ void destroy_window(struct win *pw)
 	// destory wincomponents
 	for (struct wincomponent *pwc = pw->first, *next; pwc; pwc = next)
 	{
+		if (pwc->comp_type == BITMAP)
+			free(((struct bitmap_component*)pwc->comp)->bitmap);
 		next = pwc->next;
 		free(pwc);
 	}
@@ -1007,10 +1014,11 @@ void *make_bitmap_comp(char *path, int width, int height)
 	int x, y;
 	int fd = -1;
 	int count;
-	char buffer[BMP_HEADER_SIZE];
+	char buffer[256];
 	char color_buf[3];
+	int padding;		// I hate this...
 
-	pbc->bitmap = malloc(512 * 512 * sizeof(int));
+	pbc->bitmap = malloc(width * height * sizeof(int));
 	if (!pbc->bitmap)
 		goto fail;
 
@@ -1019,8 +1027,8 @@ void *make_bitmap_comp(char *path, int width, int height)
 		goto fail;
 
 	read(fd, buffer, 0x0D);
-	int size = (int)buffer[0x0A];
-	read(fd, buffer, size - 0x0D);
+	int offset = (int)buffer[0x0A];
+	read(fd, buffer, offset - 0x0D);
 
 	for (y = height - 1, count = 0; y >= 0; y--, count = 0)
 	{
@@ -1039,7 +1047,8 @@ void *make_bitmap_comp(char *path, int width, int height)
 					color_buf[0]
 			);
 		}
-		read(fd, buffer, 4 - (count / 3) % 4);
+		padding = 4 - count % 4;
+		read(fd, buffer, padding);
 	}
 	close(fd);
 	return (void*)pbc;
