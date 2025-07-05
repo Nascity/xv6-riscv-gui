@@ -12,12 +12,22 @@
 #define IMAGE_WIDTH	167
 #define IMAGE_HEIGHT	256
 
-#define PADDING		10
+#define LOGO_WIDTH	234
+#define LOGO_HEIGHT	207
+
+#define PADDING		20
 #define PT		20
 #define TEXT_PADDING	5
 
+#define BAR_WIDTH	500
+#define BAR_HEIGHT	100
+
+#define TIMEOUT		0
+
 #define WINDOW_X	((MONITOR_WIDTH - WINDOW_WIDTH) / 2)
 #define WINDOW_Y	((MONITOR_HEIGHT - WINDOW_HEIGHT) / 2)
+
+#define FILL_Y		(PADDING + IMAGE_HEIGHT + TEXT_PADDING + PT + TEXT_PADDING + 2 * PADDING)
 
 int winid;
 int wmpid;
@@ -70,6 +80,7 @@ int init_bitmaps(void)
 	struct winmsg *msg = (struct winmsg*)buf_msg;
 	struct winmsg_regcomp *pwr = (struct winmsg_regcomp*)msg->extra;
 	char *path[3] = { "/shin.bmp", "/joo.bmp", "/hwang.bmp" };
+	char *logopath = "/logo.bmp";
 	int i, j;
 	int x;
 
@@ -91,7 +102,21 @@ int init_bitmaps(void)
 		if (wait_ack(msg))
 			return -1;
 	}
-	// DO SOMETHING	DEBUG!!
+
+	msg->ident = winid;
+	msg->code = WM_REGCOMP;
+	msg->param0 = MAKEPARAM((WINDOW_WIDTH + x - LOGO_WIDTH) / 2, (FILL_Y - LOGO_HEIGHT) / 2);
+	msg->param1 = MAKEPARAM(LOGO_WIDTH, LOGO_HEIGHT);
+
+	pwr->pid = getpid();
+	pwr->comp_type = BITMAP;
+	for (i = 0; logopath[i]; i++)
+		pwr->u.text.text[i] = logopath[i];
+	pwr->u.text.text[i] = 0;
+
+	send_msg(wmpid, buf_msg, 128);
+	if (wait_ack(msg))
+		return -1;
 	return 0;
 }
 
@@ -103,6 +128,8 @@ int init_texts(void)
 
 	char *surname[3] = { "SHIN", "JOO", "HWANG" };
 	char *name[3] = { "SEUNGRI", "HYEONWOO", "SOOJIN" };
+	char *disp_text = "THANKS FOR HELPING ME OUT";
+	char *disp_text2 = "DZIEKUJE ZA POMOC";
 
 	int i, j;
 	int x;
@@ -130,7 +157,8 @@ int init_texts(void)
 		// name
 		msg->ident = winid;
 		msg->code = WM_REGCOMP;
-		msg->param0 = MAKEPARAM(x, PADDING + IMAGE_HEIGHT + TEXT_PADDING + PT + TEXT_PADDING);
+		msg->param0 = MAKEPARAM(x, PADDING + IMAGE_HEIGHT
+				+ TEXT_PADDING + PT + TEXT_PADDING);
 		msg->param1 = 0;
 
 		pwr->pid = getpid();
@@ -146,37 +174,104 @@ int init_texts(void)
 			return -1;
 	}
 
+	msg->ident = winid;
+	msg->code = WM_REGCOMP;
+	msg->param0 = MAKEPARAM(PADDING * 2 - 5, PADDING + IMAGE_HEIGHT + TEXT_PADDING + PT
+				+ TEXT_PADDING + 3 * PADDING - 5);
+	msg->param1 = 0;
+
+	pwr->pid = getpid();
+	pwr->comp_type = TEXT;
+	pwr->u.text.pt = PT;
+	pwr->u.text.color = GRAY(255);
+	for (i = 0; disp_text[i]; i++)
+		pwr->u.text.text[i] = disp_text[i];
+	pwr->u.text.text[i] = 0;
+
+	send_msg(wmpid, buf_msg, 128);
+	if (wait_ack(msg))
+		return -1;
+
+	msg->ident = winid;
+	msg->code = WM_REGCOMP;
+	msg->param0 = MAKEPARAM(PADDING * 2 - 5, PADDING + IMAGE_HEIGHT + TEXT_PADDING + PT
+				+ TEXT_PADDING + 3 * PADDING + PT + 5);
+	msg->param1 = 0;
+
+	pwr->pid = getpid();
+	pwr->comp_type = TEXT;
+	pwr->u.text.pt = PT;
+	pwr->u.text.color = GRAY(255);
+	for (i = 0; disp_text2[i]; i++)
+		pwr->u.text.text[i] = disp_text2[i];
+	pwr->u.text.text[i] = 0;
+
+	send_msg(wmpid, buf_msg, 128);
+	if (wait_ack(msg))
+		return -1;
+
 	return 0;
-}	
+}
+
+int init_textbar(void)
+{
+	char buf_msg[128];
+	struct winmsg *msg = (struct winmsg*)buf_msg;
+	struct winmsg_regcomp *pwr = (struct winmsg_regcomp*)msg->extra;
+
+	msg->ident = winid;
+	msg->code = WM_REGCOMP;
+	msg->param0 = MAKEPARAM(PADDING, FILL_Y);
+	msg->param1 = MAKEPARAM(WINDOW_WIDTH - 3 * PADDING, BAR_HEIGHT - PADDING);
+	
+	pwr->pid = getpid();
+	pwr->comp_type = FILL;
+	pwr->u.fill_color = RGB(255, 0, 0);
+
+	send_msg(wmpid, buf_msg, 128);
+	if (wait_ack(msg))
+		return -1;
+
+	return 0;
+}
 
 int main(int argc, char *argv[])
 {
 	if (argc != 1 || argv[0][0] != 'G')
 	{
 		printf("This program has to be run in XvX shell.\n");
-		return -1;
+		exit(-1);
 	}
 
 	wmpid = argv[0][1] - '\x10';
 	if (register_window())
 		printf("Failed to register window.\n");
-	else if (init_bitmaps())
-		printf("Failed to register bitmaps.\n");
 	else if (init_texts())
 		printf("Failed to register texts.\n");
+	else if (init_textbar())
+		printf("Failed to register text bar.\n");
+	else if (init_bitmaps())
+		printf("Failed to register bitmaps.\n");
 
-	// message loop
-	while (1)
+	else
 	{
-		char buf_msg[MSG_SZ];
-		struct winmsg *msg = (struct winmsg*)buf_msg;
-
-		if (recv_msg(msg, 128, 10) == -1)
-			continue;
-
-		switch (msg->code)
+		// message loop
+		while (1)
 		{
-		
+			char buf_msg[MSG_SZ];
+			struct winmsg *msg = (struct winmsg*)buf_msg;
+
+			if (recv_msg(msg, 128, TIMEOUT) == -1)
+				continue;
+
+			switch (msg->code)
+			{
+			case WM_CLOSE:
+				exit(0);
+				break;
+			default:
+				break;
+			}
 		}
 	}
 

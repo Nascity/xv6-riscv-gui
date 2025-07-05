@@ -22,7 +22,7 @@ void add_to_top(struct win *pw);
 void move_to_top(struct win *pw);
 
 // msg operations
-#define TIMEOUT		10
+#define TIMEOUT		0
 int recv_kernel_msg(struct winmsg* pmsg);
 void send_msg_to_proc(int pid, winident_t id, int code, int param0, int param1);
 
@@ -333,10 +333,12 @@ int main(int argc, char *argv[])
 		case WM_REGISTER:
 			register_window_from_msg(msg);
 			render();
+			draw_cursor(last_pos_x, last_pos_y, RGB(0, 0, 0));
 			break;
 		case WM_REGCOMP:
 			add_components_from_msg(msg);
 			render();
+			draw_cursor(last_pos_x, last_pos_y, RGB(0, 0, 0));
 			break;
 		default:
 			break;
@@ -934,7 +936,7 @@ void shell_execute(int index)
 	}
 	close(fd);
 
-	if (!is_ext(de.name, "exe"))
+	if (!is_ext(de.name, "exe") && !is_ext(de.name, "bmp"))
 	{
 		printf("is not an executable!\n");	
 		return;
@@ -947,12 +949,20 @@ void shell_execute(int index)
 	else if (pid == 0)
 	{
 		char checksum[] = GRAPHICAL_ARG;
-		char *argv[] = { checksum , 0 };
+		char *argv[3] = { checksum , 0 };
 
 		checksum[1] += shell->owner;
 
-		if (exec(de.name, argv))
+		if (is_ext(de.name, "exe") && exec(de.name, argv))
 			printf("failed to shell execute!\n");
+		else if (is_ext(de.name, "bmp"))
+		{
+			argv[1] = de.name;
+			argv[2] = 0;
+
+			if (exec("gimg.exe", argv))
+				printf("failed to shell execute!\n");
+		}
 		else
 			printf("This is not supposed to happen!\n");
 		exit(-1);
@@ -1117,11 +1127,6 @@ void add_components_from_msg(struct winmsg *pmsg)
 		);
 		break;
 	case TEXT:
-		printf("if error occurs, it would likely be here - 2\n");	// DEBUG
-		printf("props: %s %d %d %x\n",
-			pwr->u.text.text, strlen(pwr->u.text.text),
-			pwr->u.text.pt, pwr->u.text.color
-		);
 		comp = make_text_comp(
 			pwr->u.text.text, strlen(pwr->u.text.text),
 			pwr->u.text.pt, pwr->u.text.color
@@ -1137,6 +1142,7 @@ void add_components_from_msg(struct winmsg *pmsg)
 		X(pmsg->param0), Y(pmsg->param0),
 		X(pmsg->param1), Y(pmsg->param1), comp
 	);
+
 	send_msg_to_proc(pwr->pid, pz->win->id, WM_REGCOMPACK, id, 0);
 	return;
 
@@ -1355,7 +1361,7 @@ void render(void)
 
 	for (pz = zl.bottom; pz; pz = pz->higher)
 	{
-		if (!pz->win || !((uint64)pz->win & 0x7FFF0000))
+		if (!pz->win || pz->win->minimized)
 			continue;
 		render_window(pz->win);
 		render_components(pz->win);

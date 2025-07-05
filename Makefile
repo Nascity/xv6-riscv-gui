@@ -145,12 +145,13 @@ UPROGS=\
 	$U/_zombie\
 	$U/_gtest.exe\
 	$U/_sender\
-	$U/_xvx_wm
+	$U/_xvx_wm\
+	$U/_gimg.exe
 
-fs.img: mkfs/mkfs README.md dir.bmp exe.bmp img.bmp dev.bmp file.bmp shin.bmp hwang.bmp joo.bmp $(UPROGS)
+fs.img: mkfs/mkfs README.md dir.bmp exe.bmp img.bmp dev.bmp file.bmp shin.bmp hwang.bmp joo.bmp logo.bmp $(UPROGS)
 	mkfs/mkfs fs.img README.md dir.bmp		\
 		exe.bmp img.bmp dev.bmp file.bmp	\
-		shin.bmp hwang.bmp joo.bmp		\
+		shin.bmp hwang.bmp joo.bmp logo.bmp	\
 		$(UPROGS)
 
 -include kernel/*.d user/*.d
