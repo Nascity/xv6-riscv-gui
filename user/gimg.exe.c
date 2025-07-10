@@ -115,16 +115,12 @@ int main(int argc, char *argv[])
 
 	wmpid = argv[0][1] - '\x10';
 
-	printf("here0\n");
-
 	if (get_image_dimension(argv[1]))
 		printf("Failed to retrieve dimension.\n");
-	printf("here1\n");
-	if (register_window(argv[1]))
+	else if (register_window(argv[1]))
 		printf("Failed to register window.\n");
 	else if (init_bitmap(argv[1]))
 		printf("Failed to register bitmap.\n");
-	printf("here2\n");
 
 	while (1)
 	{
